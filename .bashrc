@@ -152,3 +152,31 @@ if [ ! -n "$TMUX" ]; then
     tmux-merl.sh
 fi
 
+# Renew Environment Variables in tmux (for bash)
+# see also https://babushk.in/posts/renew-environment-tmux.html
+# for another solution for zsh
+#
+# This uses PROMPT_COMMAND, but you could also use bash-preexec,
+# see https://github.com/rcaloras/bash-preexec
+if [ -n "$TMUX" ]; then
+    function refresh_env {
+        E=`tmux show-environment`
+
+        # Iterating over a string, see also
+        # https://stackoverflow.com/questions/918886/how-do-i-split-a-string-on-a-delimiter-in-bash
+
+        while [ "$E" ] ; do
+            iter=${E%%
+*}  # This must be placed on the next line at the beginning
+            [[ "$iter" == SSH_AUTH_SOCK=* ]] && export "$iter"
+            [[ "$iter" == SSH_CONNECTION=* ]] && export "$iter"
+            [[ "$iter" == DISPLAY=* ]] && export "$iter"
+
+            [ "$E" = "$iter" ] && \
+                E='' || \
+                E="${E#*
+}"  # This must be placed on the next line at the beginning
+        done
+    }
+    PROMPT_COMMAND=refresh_env
+fi
