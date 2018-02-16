@@ -147,3 +147,8 @@ export $EDITOR
 
 export PATH="$PATH:~/.sbin:~/.bin"
 alias config='/usr/bin/git --git-dir=/home/betzf/.cfg/ --work-tree=/home/betzf'
+
+if [ ! -n "$TMUX" ]; then
+    tmux-merl.sh
+fi
+
