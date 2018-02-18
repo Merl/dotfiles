@@ -25,10 +25,10 @@ shopt -s checkwinsize
 
 # If set, the pattern "**" used in a pathname expansion context will
 # match all files and zero or more directories and subdirectories.
-#shopt -s globstar
+shopt -s globstar
 
 # make less more friendly for non-text input files, see lesspipe(1)
-#[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
 # set variable identifying the chroot you work in (used in the prompt below)
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
@@ -152,31 +152,14 @@ if [ ! -n "$TMUX" ]; then
     tmux-merl.sh
 fi
 
-# Renew Environment Variables in tmux (for bash)
-# see also https://babushk.in/posts/renew-environment-tmux.html
-# for another solution for zsh
-#
-# This uses PROMPT_COMMAND, but you could also use bash-preexec,
-# see https://github.com/rcaloras/bash-preexec
-if [ -n "$TMUX" ]; then
-    function refresh_env {
-        E=`tmux show-environment`
+# Share history in all shells
+# src: https://askubuntu.com/questions/339546/how-do-i-see-the-history-of-the-commands-i-have-run-in-tmux#339925
+# src: https://unix.stackexchange.com/questions/1288/preserve-bash-history-in-multiple-terminal-windows
+# avoid duplicates..
+export HISTCONTROL=ignoredups:erasedups
 
-        # Iterating over a string, see also
-        # https://stackoverflow.com/questions/918886/how-do-i-split-a-string-on-a-delimiter-in-bash
+# append history entries..
+shopt -s histappend
 
-        while [ "$E" ] ; do
-            iter=${E%%
-*}  # This must be placed on the next line at the beginning
-            [[ "$iter" == SSH_AUTH_SOCK=* ]] && export "$iter"
-            [[ "$iter" == SSH_CONNECTION=* ]] && export "$iter"
-            [[ "$iter" == DISPLAY=* ]] && export "$iter"
-
-            [ "$E" = "$iter" ] && \
-                E='' || \
-                E="${E#*
-}"  # This must be placed on the next line at the beginning
-        done
-    }
-    PROMPT_COMMAND=refresh_env
-fi
+# After each command, save and reload history
+PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"

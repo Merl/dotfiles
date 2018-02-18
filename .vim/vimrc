@@ -1,13 +1,27 @@
+" defaults as we cannot rely on system vimrc
 set nocompatible              " be iMproved, required
 filetype off                  " required
+syntax on
+set background=dark
+if has("autocmd")
+  au BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
+endif
+if has("autocmd")
+  filetype plugin indent on
+endif
+set showcmd             " Show (partial) command in status line.
+set showmatch           " Show matching brackets.
+set ignorecase          " Do case insensitive matching
+set smartcase           " Do smart case matching
+set incsearch           " Incremental search
+set autowrite           " Automatically save before commands like :next and :make
+set hidden              " Hide buffers when they are abandoned
+set mouse=              " Disable mouse usage (all modes)
 
+" Vundle
 " set the runtime path to include Vundle and initialize
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
-" alternatively, pass a path where Vundle should install plugins
-"call vundle#begin('~/some/path/here')
-
-" let Vundle manage Vundle, required
 Plugin 'VundleVim/Vundle.vim'
 
 " The following are examples of different formats supported.
@@ -45,34 +59,26 @@ Plugin 'vim-airline/vim-airline-themes'
 Plugin 'wincent/command-t'
 Plugin 'edkolev/tmuxline.vim'
 
-
-" All of your Plugins must be added before the following line
 call vundle#end()            " required
 filetype plugin indent on    " required
-" To ignore plugin indent changes, instead use:
-"filetype plugin on
-"
-" Brief help
-" :PluginList       - lists configured plugins
-" :PluginInstall    - installs plugins; append `!` to update or just :PluginUpdate
-" :PluginSearch foo - searches for foo; append `!` to refresh local cache
-" :PluginClean      - confirms removal of unused plugins; append `!` to auto-approve removal
-"
-" see :h vundle for more details or wiki for FAQ
-" Put your non-Plugin stuff after this line
 
-
+" pathogen - should not be neccesarry with Vundle
 " execute pathogen#infect()
-syntax on
-set mouse=
+
+" whitespaces as tabs
 set tabstop=8 softtabstop=0 expandtab shiftwidth=4 smarttab
+" treat .md as markdown
 autocmd BufNewFile,BufReadPost *.md set filetype=markdown
+" let NERDTree take over Netrw
 let NERDTreeHijackNetrw=1
+" display line numbers
+set number
+
+" Themes
 "let g:solarized_termcolors=256
 "colorscheme solarized
 "colorscheme vividchalk
 "colorscheme default
-set number
 
 " make ctrl + w in insertmode behave like in normal mode
 imap <C-w> <C-o><C-w>
@@ -93,18 +99,20 @@ map <C-f> :NERDTreeFind<CR>
 " map ctrl + b to :MBEFocus
 map <C-b> :MBEFocus<CR>
 
-" open NerdTree if empty vim is started
+" open NERDTree if empty vim is started
 autocmd StdinReadPre * let s:std_in=1
 autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
 
-" Nerdtree if dir is opened
+" open NERDTree if dir is opened
 autocmd VimEnter * if argc() == 1 && isdirectory(argv()[0]) && !exists("s:std_in") | exe 'NERDTree' argv()[0] | wincmd p | ene | endif
 
-" close vim if only NERDTree is open 
+" close vim if NERDTree is last open window
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
 
 " enable airline tab theme
 let g:airline#extensions#tabline#enabled = 1
-
+" airline use powerline font
 let g:airline_powerline_fonts = 1
+" disable overwriting tmux line on vim start
 let g:airline#extensions#tmuxline#enabled = 0
+
