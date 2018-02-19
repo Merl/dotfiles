@@ -122,3 +122,6 @@ let g:airline#extensions#tabline#enabled = 1
 let g:airline_powerline_fonts = 1
 " disable overwriting tmux line on vim start
 let g:airline#extensions#tmuxline#enabled = 0
+
+" map the leader to "," instead of "\" (less keystrokes on german keyboard)
+let mapleader = "," 
