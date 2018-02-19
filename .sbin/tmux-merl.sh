@@ -1,4 +1,5 @@
 #!/bin/sh
+#set -x
 SESSION=merl
 #tmux="tmux -2 -f tmux-merl.conf"
 tmux="/usr/bin/tmux -2"
@@ -27,4 +28,8 @@ $tmux select-layout -t $SESSION:0 63dc,180x55,0,0{65x55,0,0[65x12,0,0,65x42,0,13
 #$tmux new-window    -t $SESSION:4
 #$tmux select-window -t $SESSION:0
 #$tmux send-keys -t $SESSION:0.0 'echo hallo' enter
+
+if [ -e "$HOME/.overwrites/tmux.sh" ]; then
+    . "$HOME/.overwrites/tmux.sh"
+fi
 $tmux attach -t $SESSION
