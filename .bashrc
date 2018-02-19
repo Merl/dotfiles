@@ -146,7 +146,7 @@ EDITOR=vim
 export $EDITOR
 
 export PATH="$PATH:~/.sbin:~/.bin"
-alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=/home/betzf'
+alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
 
 if [ ! -n "$TMUX" ]; then
     tmux-merl.sh
