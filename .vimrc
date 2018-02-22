@@ -126,6 +126,12 @@ let g:airline#extensions#tmuxline#enabled = 0
 " map the leader to "," instead of "\" (less keystrokes on german keyboard)
 let mapleader = ","
 
+" set vim to xterm-256color mode if tmux-256color is set
+if &term == "tmux-256color"
+    set term=xterm-256color
+endif
+
+
 let $LOCALFILE=expand("~/.overwrites/vimrc")
 if filereadable($LOCALFILE)
     source $LOCALFILE
