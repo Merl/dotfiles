@@ -1,2 +1,5 @@
 [include]
     path = ~/.overwrites/gitconfig
+[user]
+	name = Merl
+	email = florian.betz@kantar.com
