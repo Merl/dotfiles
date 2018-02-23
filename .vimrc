@@ -131,6 +131,17 @@ if &term == "tmux-256color"
     set term=xterm-256color
 endif
 
+" vim endless undo
+" src: https://vi.stackexchange.com/questions/6/how-can-i-use-the-undofile
+if !isdirectory($HOME."/.vim")
+    call mkdir($HOME."/.vim", "", 0770)
+endif
+if !isdirectory($HOME."/.vim/undo-dir")
+    call mkdir($HOME."/.vim/undo-dir", "", 0700)
+endif
+set undodir=~/.vim/undo-dir
+set undofile
+
 
 let $LOCALFILE=expand("~/.overwrites/vimrc")
 if filereadable($LOCALFILE)
