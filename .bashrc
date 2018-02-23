@@ -148,9 +148,6 @@ export $EDITOR
 export PATH="$PATH:~/.sbin:~/.bin"
 #alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
 
-if [ ! -n "$TMUX" ]; then
-    tmux-merl.sh
-fi
 
 # Share history in all shells
 # src: https://askubuntu.com/questions/339546/how-do-i-see-the-history-of-the-commands-i-have-run-in-tmux#339925
@@ -215,4 +212,18 @@ export SCM_CHECK=true
 
 # Load Bash It
 source "$BASH_IT"/bash_it.sh
+
+# add a function to enable my bash-it defaults (again)
+bash-it-defaults () {
+    ~/.bash_it/bash_it.sh enable alias apt curl git systemd tmux vim 
+    ~/.bash_it/bash_it.sh enable completion defaults export git makefile pip3 pip pipenv ssh system tmux
+    ~/.bash_it/bash_it.sh enable plugin alias-completion history
+}
+
+# if not in tmux start tmux
+if [ ! -n "$TMUX" ]; then
+    tmux-merl.sh
+fi
+
+# alias for dotfile storage in git
 alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
