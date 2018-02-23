@@ -216,3 +216,5 @@ export SCM_CHECK=true
 # Load Bash It
 source "$BASH_IT"/bash_it.sh
 alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
+
+#change vid
