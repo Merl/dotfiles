@@ -162,7 +162,7 @@ shopt -s histappend
 PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
 # Path to the bash it configuration
-export BASH_IT="/home/betzf/.bash_it"
+export BASH_IT="$HOME/.bash_it"
 
 # Lock and Load a custom theme file
 # location /.bash_it/themes/
@@ -216,9 +216,9 @@ source "$BASH_IT"/bash_it.sh
 # add a function to enable my bash-it defaults (again)
 bash-it-defaults () {
     ~/.bash_it/install.sh --no-modify-config
-    ~/.bash_it/bash_it.sh enable alias apt curl git systemd tmux vim 
-    ~/.bash_it/bash_it.sh enable completion defaults export git makefile pip3 pip pipenv ssh system tmux
-    ~/.bash_it/bash_it.sh enable plugin alias-completion history
+    bash_it enable alias apt curl git systemd tmux vim 
+    bash_it enable completion defaults export git makefile pip3 pip pipenv ssh system tmux
+    bash_it enable plugin alias-completion history
 }
 
 # if not in tmux start tmux
