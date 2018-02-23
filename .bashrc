@@ -215,6 +215,7 @@ source "$BASH_IT"/bash_it.sh
 
 # add a function to enable my bash-it defaults (again)
 bash-it-defaults () {
+    ~/.bash_it/install.sh --no-modify-config
     ~/.bash_it/bash_it.sh enable alias apt curl git systemd tmux vim 
     ~/.bash_it/bash_it.sh enable completion defaults export git makefile pip3 pip pipenv ssh system tmux
     ~/.bash_it/bash_it.sh enable plugin alias-completion history
