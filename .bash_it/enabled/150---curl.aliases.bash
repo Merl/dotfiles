@@ -1,1 +1,0 @@
-../aliases/available/curl.aliases.bash
