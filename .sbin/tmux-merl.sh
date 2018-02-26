@@ -1,8 +1,8 @@
 #!/bin/sh
-#set -x
 SESSION=merl
-#tmux="tmux -2 -f tmux-merl.conf"
-tmux="/usr/bin/tmux -2"
+tmux="./tmux.pl -2" # -f .sbin/tmux-merl.conf"
+EDITOR=vim
+export $EDITOR
 
 
 # if the session is already running, just attach to it.
@@ -20,16 +20,12 @@ $tmux new-session -d -s $SESSION
 $tmux split-window  -h -t $SESSION:0
 $tmux split-window  -h -t $SESSION:0
 $tmux split-window  -h -t $SESSION:0
-$tmux select-layout -t $SESSION:0 63dc,180x55,0,0{65x55,0,0[65x12,0,0,65x42,0,13],114x55,66,0[114x37,66,0,114x17,66,38]}
+$tmux select-layout -t $SESSION:0 '99cc,271x83,0,0[271x61,0,0{75x61,0,0,3,195x61,76,0,5},271x21,0,62{100x21,0,62,4,170x21,101,62,6}]'
 #$tmux new-window    -t $SESSION:1 
 #$tmux new-window    -t $SESSION:2  
 #$tmux new-window    -t $SESSION:3  
 #$tmux split-window  -h -t $SESSION:3
 #$tmux new-window    -t $SESSION:4
-#$tmux select-window -t $SESSION:0
-#$tmux send-keys -t $SESSION:0.0 'echo hallo' enter
-
-if [ -f "$HOME/.overwrites/tmux.sh" ]; then
-    . "$HOME/.overwrites/tmux.sh"
-fi
+$tmux select-window -t $SESSION:0
+$tmux select-pane -t 1
 $tmux attach -t $SESSION
