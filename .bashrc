@@ -223,7 +223,7 @@ bash-it-defaults () {
 
 # if not in tmux start tmux
 if [ ! -n "$TMUX" ]; then
-    ./tmux-merl.sh
+    tmux-merl.sh
 fi
 
 # alias for dotfile storage in git
