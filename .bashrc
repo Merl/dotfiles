@@ -153,7 +153,7 @@ export PATH="$PATH:~/.sbin:~/.bin"
 # src: https://askubuntu.com/questions/339546/how-do-i-see-the-history-of-the-commands-i-have-run-in-tmux#339925
 # src: https://unix.stackexchange.com/questions/1288/preserve-bash-history-in-multiple-terminal-windows
 # avoid duplicates..
-export HISTCONTROL=ignoredups:erasedups
+export HISTCONTROL=ignoredups:erasedups:ignorespace
 
 # append history entries..
 shopt -s histappend
