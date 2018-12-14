@@ -118,6 +118,8 @@ screen-256color=
 
 xterm-256color=
 
+tmux-256color=
+
 [Panels]
 show_mini_info=true
 kilobyte_si=false
@@ -138,6 +140,9 @@ permission_mode=false
 torben_fj_mode=false
 quick_search_mode=2
 select_flags=6
+
+[terminal:tmux-256color]
+backtab=\\e[Z
 
 [Panelize]
 Geänderte git Dateien=git ls-files --modified
