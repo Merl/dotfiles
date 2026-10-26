@@ -81,10 +81,14 @@ fi
 # 2018 bare-repo alias). The checkout is where ~/.bashrc links to, else
 # $DOTFILES_DIR, else the path install.sh recorded, else ~/.dotfiles.
 #   config status | diff | log ...  any git command
+#   config check                    compare the home copies with the
+#                                   checkout (install.sh --check)
 #   config sync [message]           commit all changes, pull --rebase, push
 #                                   to every remote; where the dotfiles are
-#                                   copies (Windows), install.sh then
-#                                   refreshes them
+#                                   copies (Windows), install.sh --adopt
+#                                   first takes edited copies into the
+#                                   checkout (a conflict stops the sync) and
+#                                   install.sh refreshes them at the end
 # (unalias: an old 'config' alias would be expanded into this definition)
 unalias config 2>/dev/null
 config() {
@@ -98,8 +102,17 @@ config() {
     else
         repo=$HOME/.dotfiles
     fi
-    [ "${1-}" = sync ] || { git -C "$repo" "$@"; return; }
-    shift
+    case ${1-} in
+        check) bash "$repo/install.sh" --check; return ;;
+        sync)  shift ;;
+        *)     git -C "$repo" "$@"; return ;;
+    esac
+    if [ ! -L "$HOME/.bashrc" ]; then
+        bash "$repo/install.sh" --adopt || {
+            echo "config sync: stopped, nothing committed (see above)" >&2
+            return 1
+        }
+    fi
     git -C "$repo" add -A || return
     if ! git -C "$repo" diff --cached --quiet; then
         git -C "$repo" diff --cached --stat

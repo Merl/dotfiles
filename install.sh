@@ -11,6 +11,10 @@
 # Every step is idempotent: a second run reports "ok" everywhere and changes
 # nothing. Files in the way are moved to ~/.dotfiles-backup/<timestamp>/
 # first; --restore undoes a run (dotfiles only, not packages).
+#
+# Where the dotfiles are copies (Windows without symlink rights, --copy),
+# ~/.config/dotfiles/copies.list records them; --check compares them with
+# the checkout and --adopt takes edited home copies into the checkout.
 
 set -euo pipefail
 
@@ -24,8 +28,13 @@ Set up the dotfiles environment: clone/update the repository, install missing
 packages, link the dotfiles into $HOME, install vim plugins.
 
   -n, --dry-run        show what would happen, change nothing
+      --link           create symlinks (default on Linux); on Windows they
+                       need Developer Mode or admin rights
       --copy           copy files instead of creating symlinks
-                       (default on Windows / Git Bash / MSYS2 / Cygwin)
+                       Windows (Git Bash / MSYS2 / Cygwin): the option is
+                       remembered in ~/.config/dotfiles/mode; without one,
+                       the remembered choice is used, else a question if
+                       symlinks work and this is a terminal, else copies
       --no-packages    do not check or install packages (incl. starship)
       --no-vim         do not install vim plugins
       --pinned         check the vim plugins out at the commits recorded in
@@ -37,6 +46,13 @@ packages, link the dotfiles into $HOME, install vim plugins.
                        restored directory under ~/.dotfiles-backup.
                        Home dotfiles only: packages, vim plugins and the
                        files of install.ps1 are left alone.
+      --check          compare the copies recorded in
+                       ~/.config/dotfiles/copies.list with the checkout and
+                       report what changed where; changes nothing. Exit
+                       status 1 on a conflict (both sides changed).
+      --adopt          like --check, then copy home copies that were edited
+                       (and whose checkout file is unchanged) into the
+                       checkout. Changes nothing if there is a conflict.
   -h, --help           show this help
 
 Run outside a checkout (e.g. via curl), it clones the repository to
@@ -139,12 +155,20 @@ exists() { [ -e "$1" ] || [ -L "$1" ]; }
 
 file_sum() { cksum < "$1" 2>/dev/null || echo none; }
 
+# sha256_hex FILE: SHA-256 of FILE in lower-case hex; fails without a tool
+sha256_hex() {
+    local h
+    if have sha256sum; then h=$(sha256sum < "$1") || return 1
+    elif have shasum; then h=$(shasum -a 256 < "$1") || return 1
+    else return 1
+    fi
+    printf '%s' "${h%% *}"
+}
+
 # file_hash FILE: tagged content checksum, recorded in installed.list for copies
 file_hash() {
     local h
-    if have sha256sum; then h=$(sha256sum < "$1") && printf 'sha256:%s' "${h%% *}" && return 0
-    elif have shasum; then h=$(shasum -a 256 < "$1") && printf 'sha256:%s' "${h%% *}" && return 0
-    fi
+    if h=$(sha256_hex "$1"); then printf 'sha256:%s' "$h"; return 0; fi
     h=$(cksum < "$1") && printf 'cksum:%s' "${h// /-}"
 }
 
@@ -153,10 +177,8 @@ hash_matches() {
     local h
     case $2 in
         sha256:*)
-            if have sha256sum; then h=$(sha256sum < "$1") || return 1
-            else h=$(shasum -a 256 < "$1") || return 1
-            fi
-            [ "sha256:${h%% *}" = "$2" ] ;;
+            h=$(sha256_hex "$1") || return 1
+            [ "sha256:$h" = "$2" ] ;;
         cksum:*)
             h=$(cksum < "$1") || return 1
             [ "cksum:${h// /-}" = "$2" ] ;;
@@ -182,6 +204,67 @@ inside() {
         case $p in /|.|'') return 1 ;; esac
         p=$(dirname -- "$p")
     done
+}
+
+# copies.list (~/.config/dotfiles): one line per dotfile installed as a copy,
+# written by install.sh and install.ps1 (which owns the lines of windows/...):
+#   source (relative to the checkout)<TAB>target<TAB>sha256 as installed
+# Targets are in mixed form on Windows (C:/Users/...), which both bash and
+# PowerShell can use. The lines are sorted (byte order), so that both writers
+# produce the same file.
+
+# list_path PATH: PATH as written to copies.list; from_list_path: back
+list_path() {
+    if [ "$OS" = windows ] && have cygpath; then cygpath -m -- "$1"; else printf '%s' "$1"; fi
+}
+from_list_path() {
+    if [ "$OS" = windows ] && have cygpath; then cygpath -u -- "$1"; else printf '%s' "$1"; fi
+}
+
+# read_copies: C_SRC, C_TGT (list form), C_SUM from copies.list
+read_copies() {
+    C_SRC=(); C_TGT=(); C_SUM=()
+    [ -f "$COPIES_FILE" ] || return 0
+    local s t h
+    while IFS=$'\t' read -r s t h; do
+        h=${h%$'\r'}
+        case $s in ''|'#'*) continue ;; esac
+        [ -n "$t" ] && [ -n "$h" ] || continue
+        C_SRC+=("$s"); C_TGT+=("$t"); C_SUM+=("$h")
+    done < "$COPIES_FILE"
+}
+
+# write_copies LINE...: make copies.list hold exactly these entries; sets
+# COPIES_CHANGED to 1 if the file was written (it is not created for none)
+write_copies() {
+    local new tmp
+    COPIES_CHANGED=0
+    [ "$#" -gt 0 ] || [ -f "$COPIES_FILE" ] || return 0
+    new=$(
+        printf '# dotfiles installed as copies (written by install.sh and install.ps1)\n'
+        printf '# source (relative to the checkout)<TAB>target<TAB>sha256 as installed\n'
+        if [ "$#" -gt 0 ]; then printf '%s\n' "$@" | LC_ALL=C sort -u; fi
+    )
+    [ "$(cat "$COPIES_FILE" 2>/dev/null)" != "$new" ] || return 0
+    tmp=$COPIES_FILE.tmp.$$
+    if ! { mkdir -p -- "${COPIES_FILE%/*}" && printf '%s\n' "$new" > "$tmp" && mv -f -- "$tmp" "$COPIES_FILE"; }; then
+        rm -f -- "$tmp"
+        return 1
+    fi
+    COPIES_CHANGED=1
+}
+
+# copies_line I: entry I of the C_* arrays as a copies.list line
+copies_line() { printf '%s\t%s\t%s' "${C_SRC[$1]}" "${C_TGT[$1]}" "${C_SUM[$1]}"; }
+
+# recorded_sum TARGET: checksum copies.list has for TARGET (a $HOME path)
+recorded_sum() {
+    local t i
+    t=$(list_path "$1")
+    for i in "${!C_TGT[@]}"; do
+        if [ "${C_TGT[i]}" = "$t" ]; then printf '%s' "${C_SUM[i]}"; return 0; fi
+    done
+    return 1
 }
 
 # norm_url URL: lower case, without trailing slashes and ".git"
@@ -226,8 +309,10 @@ check_checkout() {
 
 # --- arguments ---------------------------------------------------------------
 DRY_RUN=0
-MODE=
+MODE_OPT=
 RESTORE=0
+CHECK=0
+ADOPT=0
 RESTORE_DIR=
 NO_PACKAGES=0
 NO_VIM=0
@@ -236,7 +321,11 @@ PINNED=0
 while [ $# -gt 0 ]; do
     case $1 in
         -n|--dry-run)  DRY_RUN=1 ;;
-        --copy)        MODE=copy ;;
+        --link|--copy)
+            [ -z "$MODE_OPT" ] || [ "$MODE_OPT" = "${1#--}" ] || die "--link and --copy exclude each other"
+            MODE_OPT=${1#--} ;;
+        --check)       CHECK=1 ;;
+        --adopt)       ADOPT=1 ;;
         --no-packages) NO_PACKAGES=1 ;;
         --no-vim)      NO_VIM=1 ;;
         --no-pull)     NO_PULL=1 ;;
@@ -250,6 +339,9 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+if [ $((RESTORE + CHECK + ADOPT)) -gt 1 ]; then
+    die "--restore, --check and --adopt exclude each other"
+fi
 
 PREFIX=
 [ "$DRY_RUN" -eq 1 ] && PREFIX='[dry-run] '
@@ -326,7 +418,7 @@ pick_source() {
 # =============================================================================
 # bootstrap: no checkout -> clone (or update) $DOTFILES_DIR and re-exec
 # =============================================================================
-if [ -z "$REPO" ] && [ "$RESTORE" -eq 0 ]; then
+if [ -z "$REPO" ] && [ "$RESTORE" -eq 0 ] && [ "$CHECK" -eq 0 ] && [ "$ADOPT" -eq 0 ]; then
     TARGET=${DOTFILES_DIR:-$HOME/.dotfiles}
     # guard against a loop: the install.sh started below must find its checkout
     if [ -n "${DOTFILES_BOOTSTRAPPED:-}" ]; then
@@ -378,11 +470,10 @@ if [ -n "$REPO" ]; then
     HOME_REAL=$(cd -P -- "$HOME" && pwd)
     [ "$HOME_REAL" != "$REPO" ] || die "the repository is \$HOME itself (old bare-repo checkout?); clone it elsewhere, e.g. ~/.dotfiles"
 fi
-if [ -z "$MODE" ]; then
-    if [ "$OS" = windows ]; then MODE="copy"; else MODE="link"; fi
-fi
 
 BACKUP_ROOT=$HOME/.dotfiles-backup
+COPIES_FILE=$HOME/.config/dotfiles/copies.list
+MODE_FILE=$HOME/.config/dotfiles/mode
 
 # =============================================================================
 # restore (dotfiles only)
@@ -454,6 +545,7 @@ restore_key() {
         act remove "$k"
         run rm -f -- "$target" || { warn "could not remove $target"; return 1; }
         removed=1
+        REMOVED_TARGETS+=("$(list_path "$target")")
     fi
     if [ "$backed" -eq 1 ]; then
         if [ "$removed" -eq 0 ] && exists "$target"; then
@@ -504,9 +596,24 @@ if [ "$RESTORE" -eq 1 ]; then
 
     say "${PREFIX}Restoring from $RESTORE_DIR"
     problems=0
+    REMOVED_TARGETS=()
     for k in "${keys[@]+"${keys[@]}"}"; do
         restore_key "$k" || problems=$((problems + 1))
     done
+    # removed copies must not stay in copies.list (--adopt would take the
+    # original that is back there for an edited copy)
+    if [ "$DRY_RUN" -eq 0 ] && [ "${#REMOVED_TARGETS[@]}" -gt 0 ]; then
+        read_copies
+        lines=()
+        for i in "${!C_SRC[@]}"; do
+            keep=1
+            for t in "${REMOVED_TARGETS[@]}"; do
+                if [ "$t" = "${C_TGT[i]}" ]; then keep=0; break; fi
+            done
+            [ "$keep" -eq 0 ] || lines+=("$(copies_line "$i")")
+        done
+        write_copies "${lines[@]+"${lines[@]}"}" || warn "could not update $COPIES_FILE"
+    fi
 
     say ""
     if [ "$problems" -gt 0 ]; then
@@ -521,6 +628,206 @@ if [ "$RESTORE" -eq 1 ]; then
     fi
     [ "$problems" -eq 0 ] || exit 1
     exit 0
+fi
+
+# =============================================================================
+# check / adopt the recorded copies
+# =============================================================================
+# Per copy: H = home copy, R = checkout file, S = checksum recorded at install
+#   H=S  R=S        unchanged
+#   H=S  R!=S       checkout newer (the next install refreshes the copy)
+#   H=R  (S differs) in sync (--adopt updates S)
+#   H!=S R=S        home copy changed (--adopt copies it into the checkout)
+#   H!=S R!=S H!=R  conflict: nothing is changed, exit status 1
+# Copies of one source (the two PowerShell profiles) that were changed
+# differently are a conflict too.
+if [ "$CHECK" -eq 1 ] || [ "$ADOPT" -eq 1 ]; then
+    [ -n "$REPO" ] || die "--check/--adopt compare with a checkout: run the install.sh in it (e.g. ~/.dotfiles/install.sh --check)"
+    have sha256sum || have shasum || die "sha256sum (or shasum) is needed for --check/--adopt"
+    REPO_REAL=$(resolve "$REPO")
+    read_copies
+    if [ "${#C_SRC[@]}" -eq 0 ]; then
+        say "No copies recorded in $COPIES_FILE; nothing to check."
+        exit 0
+    fi
+    say "${PREFIX}Comparing the copies in $COPIES_FILE with $REPO"
+    E_STATE=(); E_PATH=(); E_H=()
+    for i in "${!C_SRC[@]}"; do
+        rel=${C_SRC[i]} sum=${C_SUM[i]} h= state=
+        tgt=$(from_list_path "${C_TGT[i]}")
+        src=$REPO/$rel
+        case /$rel/ in
+            *//*|*/./*|*/../*) state=invalid ;;
+        esac
+        if [ -n "$state" ]; then
+            :
+        # --adopt writes to src: only a plain file inside the checkout
+        elif [ -L "$src" ] || [ ! -f "$src" ] || ! inside "$REPO_REAL" "$(real_parent "$src")"; then
+            state=nosource
+        elif ! exists "$tgt"; then
+            state=missing
+        elif [ -L "$tgt" ] || [ ! -f "$tgt" ] || [ "$tgt" -ef "$src" ]; then
+            state=notcopy
+        else
+            { h=$(sha256_hex "$tgt") && r=$(sha256_hex "$src"); } || die "cannot read $tgt or $src"
+            if [ "$h" = "$sum" ] && [ "$r" = "$sum" ]; then state=ok
+            elif [ "$h" = "$r" ]; then state=sync
+            elif [ "$h" = "$sum" ]; then state=newer
+            elif [ "$r" = "$sum" ]; then state=home
+            else state=conflict
+            fi
+        fi
+        E_STATE+=("$state"); E_PATH+=("$tgt"); E_H+=("$h")
+    done
+    # copies of the same source changed differently -> conflict
+    for i in "${!C_SRC[@]}"; do
+        [ "${E_STATE[i]}" = home ] || continue
+        for j in "${!C_SRC[@]}"; do
+            if [ "$j" != "$i" ] && [ "${C_SRC[j]}" = "${C_SRC[i]}" ] &&
+               { [ "${E_STATE[j]}" = home ] || [ "${E_STATE[j]}" = differ ]; } &&
+               [ "${E_H[j]}" != "${E_H[i]}" ]; then
+                E_STATE[i]=differ
+            fi
+        done
+    done
+
+    # shown as recorded (C:/Users/... on Windows)
+    conflicts=0 n_ok=0 n_home=0 n_newer=0 n_other=0 repo_l=$(list_path "$REPO")
+    for i in "${!C_SRC[@]}"; do
+        rel=${C_SRC[i]} tgt=${C_TGT[i]}
+        case ${E_STATE[i]} in
+            ok)       n_ok=$((n_ok + 1)) ;;
+            sync)     act "in sync" "$tgt" "same as the checkout; recorded checksum outdated" ;;
+            newer)    n_newer=$((n_newer + 1))
+                      act newer "$tgt" "checkout newer; install.sh refreshes the copy" ;;
+            home)     n_home=$((n_home + 1))
+                      act changed "$tgt" "home copy changed; --adopt copies it to $repo_l/$rel" ;;
+            conflict) conflicts=$((conflicts + 1))
+                      act CONFLICT "$tgt" "home copy and $repo_l/$rel both changed since the install" ;;
+            differ)   conflicts=$((conflicts + 1))
+                      act CONFLICT "$tgt" "the copies of $rel were changed differently" ;;
+            missing)  n_other=$((n_other + 1))
+                      act missing "$tgt" "recorded copy of $rel is gone" ;;
+            notcopy)  n_other=$((n_other + 1))
+                      act skip "$tgt" "not a copy any more ($(describe "${E_PATH[i]}")); the next install updates the list" ;;
+            nosource) n_other=$((n_other + 1))
+                      act skip "$tgt" "$rel is not a plain file in the checkout" ;;
+            invalid)  n_other=$((n_other + 1))
+                      act skip "$tgt" "invalid source path in $COPIES_FILE: $rel" ;;
+        esac
+    done
+    say "${#C_SRC[@]} recorded copies: $n_ok unchanged, $n_home home copy changed, $n_newer checkout newer, $conflicts conflict(s), $n_other other"
+    if [ "$conflicts" -gt 0 ]; then
+        [ "$ADOPT" -eq 0 ] || say "Conflict: nothing adopted."
+        say "Merge the versions by hand into the checkout file (then install.sh refreshes the copies), or copy the checkout file over the home copy; then run --check again."
+        exit 1
+    fi
+    [ "$ADOPT" -eq 1 ] || exit 0
+
+    # adopt: home copy -> checkout, then the recorded checksums
+    adopted=0 failed=0 lines=()
+    for i in "${!C_SRC[@]}"; do
+        rel=${C_SRC[i]} tgt=${E_PATH[i]} src=$REPO/${C_SRC[i]}
+        case ${E_STATE[i]} in
+            home)
+                if [ "$(sha256_hex "$src")" != "${E_H[i]}" ]; then
+                    act adopt "${C_TGT[i]}" "-> $(list_path "$src")"
+                    if ! run cp -p -- "$tgt" "$src"; then
+                        warn "could not copy $tgt to $src"
+                        failed=$((failed + 1))
+                        continue
+                    fi
+                    adopted=$((adopted + 1))
+                else
+                    act adopt "${C_TGT[i]}" "same change as the other copy of $rel"
+                fi
+                C_SUM[i]=${E_H[i]} ;;
+            sync)
+                act update "${C_TGT[i]}" "recorded checksum"
+                C_SUM[i]=${E_H[i]} ;;
+        esac
+    done
+    if [ "$DRY_RUN" -eq 0 ]; then
+        for i in "${!C_SRC[@]}"; do lines+=("$(copies_line "$i")"); done
+        write_copies "${lines[@]}" || { warn "could not update $COPIES_FILE"; failed=$((failed + 1)); }
+    fi
+    if [ "$adopted" -gt 0 ]; then
+        say "${PREFIX}Adopted $adopted file(s) into $REPO; review and commit them (config diff, config sync)."
+    else
+        say "${PREFIX}Nothing to adopt."
+    fi
+    [ "$failed" -eq 0 ] || exit 1
+    exit 0
+fi
+
+# =============================================================================
+# mode: symlinks or copies
+# =============================================================================
+# Linux: links (--copy: copies). Windows: --link/--copy, else the choice
+# remembered in $MODE_FILE, else a question if links work and this is a
+# terminal, else copies. Only a choice (option or answer) is remembered, so
+# that a later run still asks once links have become possible.
+MODE=$MODE_OPT
+MODE_REMEMBER=0
+MODE_NOTE=
+LINKS_OK=
+
+# links_possible: a native Windows symlink can be created (Developer Mode or
+# admin rights); probed once, in a temporary directory
+links_possible() {
+    if [ -z "$LINKS_OK" ]; then
+        local d
+        LINKS_OK=0
+        if d=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-probe.XXXXXX"); then
+            : > "$d/file"
+            if MSYS=winsymlinks:nativestrict CYGWIN=winsymlinks:nativestrict \
+                   ln -s -- "$d/file" "$d/link" 2>/dev/null && [ -L "$d/link" ]; then
+                LINKS_OK=1
+            fi
+            rm -rf -- "$d"
+        fi
+    fi
+    [ "$LINKS_OK" -eq 1 ]
+}
+
+if [ "$OS" = windows ]; then
+    remembered=
+    [ ! -f "$MODE_FILE" ] || remembered=$(tr -d ' \r\n' < "$MODE_FILE")
+    case $remembered in link|copy) ;; *) remembered= ;; esac
+    if [ -n "$MODE" ]; then
+        MODE_REMEMBER=1
+    elif [ -n "$remembered" ]; then
+        MODE=$remembered
+    elif links_possible && [ -t 0 ] && [ -t 1 ] && [ "$DRY_RUN" -eq 0 ]; then
+        say "Symlinks work here: edits in your home then go straight into the checkout."
+        answer=
+        read -r -p "Use symlinks instead of copies? [Y/n] " answer || answer=n
+        case $answer in [nN]*) MODE=copy ;; *) MODE=link ;; esac
+        MODE_REMEMBER=1
+        # right away: a restart after git pull must not ask again
+        mkdir -p -- "${MODE_FILE%/*}" && printf '%s\n' "$MODE" > "$MODE_FILE"
+    else
+        MODE=copy
+        if links_possible; then
+            MODE_NOTE="copies are used; symlinks would work here: install.sh --link (or install.ps1 -Link) switches to them."
+        else
+            MODE_NOTE="copies are used; symlinks are not possible here. For symlinks enable Developer Mode (Settings > System > For developers), then run install.sh --link (or install.ps1 -Link)."
+        fi
+    fi
+    if [ "$MODE" = link ] && ! links_possible; then
+        if [ -n "$MODE_OPT" ]; then
+            die "--link: symlinks cannot be created here; enable Developer Mode (Settings > System > For developers) or use --copy"
+        fi
+        warn "$MODE_FILE says link, but symlinks cannot be created here (Developer Mode off?); using copies this time (--copy makes that the choice)"
+        MODE=copy
+    fi
+    if [ "$MODE" = link ]; then
+        # real NTFS symlinks, never MSYS' fallback (a copy of the file)
+        export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict"
+        export CYGWIN="${CYGWIN:+$CYGWIN }winsymlinks:nativestrict"
+    fi
+elif [ -z "$MODE" ]; then
+    MODE=link
 fi
 
 REPO_SHOWN=${DOTFILES_PREVIEW_OF:-$REPO}
@@ -821,9 +1128,22 @@ log() {
 REPO_REAL=$(resolve "$REPO")
 REPO_REAL=${REPO_REAL:-$REPO}
 
+# record_copy KEY TARGET: TARGET is our copy of KEY; goes to copies.list
+NEW_COPIES=()
+record_copy() {
+    local h
+    [ "$DRY_RUN" -eq 0 ] || return 0
+    if ! h=$(sha256_hex "$2"); then
+        warn "$1: no sha256sum/shasum; copy not recorded in $COPIES_FILE"
+        return 0
+    fi
+    NEW_COPIES+=("$1"$'\t'"$(list_path "$2")"$'\t'"$h")
+}
+read_copies
+
 # install_one SRC TARGET KEY: KEY is the relpath used in the backup and log
 install_one() {
-    local src=$1 target=$2 key=$3 label=$MODE detail="" backed=0 parent
+    local src=$1 target=$2 key=$3 label=$MODE detail="" backed=0 parent sum
     [ -f "$src" ] || [ -d "$src" ] || { warn "missing in repo: $src"; return 0; }
     if [ -d "$src" ] && [ "$MODE" = copy ]; then
         act skip "$key" "directory; only installed as a symlink"
@@ -847,12 +1167,18 @@ install_one() {
 
     if exists "$target" && is_ours "$MODE" "$src" "$target"; then
         act ok "$key"
+        [ "$MODE" = link ] || record_copy "$key" "$target"
         return 0
     fi
 
     ensure_backup
     if exists "$target"; then
         detail="was: $(describe "$target")"
+        # a recorded copy that was edited in the home directory
+        if [ -f "$target" ] && [ ! -L "$target" ] && sum=$(recorded_sum "$target") &&
+           [ "$(sha256_hex "$target" || true)" != "$sum" ]; then
+            warn "$key: $target was edited since it was installed; that version goes to $BACKUP/$key (to keep such edits run install.sh --adopt first, or config sync)"
+        fi
         label=backup+$MODE
         run mkdir -p -- "$(dirname -- "$BACKUP/$key")"
         if ! run mv -- "$target" "$BACKUP/$key"; then
@@ -882,6 +1208,7 @@ install_one() {
     INSTALLED=$((INSTALLED + 1))
     if [ "$MODE" = copy ]; then
         log copy "$key" "$target" "$src" "$(run file_hash "$target")"
+        record_copy "$key" "$target"
     else
         log link "$key" "$target" "$src"
     fi
@@ -894,6 +1221,36 @@ for rel in "${files[@]}"; do
 done
 if [ "$INSTALLED" -gt 0 ]; then
     CHANGES+=("$INSTALLED dotfile(s) installed")
+fi
+
+# copies.list: the copies of this run; the lines of install.ps1 (windows/...)
+# are kept. Links and files that are not ours any more drop out.
+if [ "$DRY_RUN" -eq 0 ]; then
+    lines=("${NEW_COPIES[@]+"${NEW_COPIES[@]}"}")
+    for i in "${!C_SRC[@]}"; do
+        case ${C_SRC[i]} in windows/*) lines+=("$(copies_line "$i")") ;; esac
+    done
+    if ! write_copies "${lines[@]+"${lines[@]}"}"; then
+        warn "could not write $COPIES_FILE"
+    elif [ "$COPIES_CHANGED" -eq 1 ]; then
+        act write "copies list" "$COPIES_FILE"
+        CHANGES+=("copies recorded in $COPIES_FILE")
+    elif [ -f "$COPIES_FILE" ]; then
+        act ok "copies list" "$COPIES_FILE"
+    fi
+fi
+
+# the mode chosen with --link/--copy or the question (Windows)
+if [ "$MODE_REMEMBER" -eq 1 ]; then
+    if [ -f "$MODE_FILE" ] && [ "$(tr -d ' \r\n' < "$MODE_FILE")" = "$MODE" ]; then
+        act ok "mode" "$MODE_FILE: $MODE"
+    else
+        act write "mode" "$MODE_FILE: $MODE"
+        if [ "$DRY_RUN" -eq 0 ]; then
+            mkdir -p -- "${MODE_FILE%/*}" && printf '%s\n' "$MODE" > "$MODE_FILE"
+            CHANGES+=("mode $MODE recorded in $MODE_FILE")
+        fi
+    fi
 fi
 
 # where the checkout is, for the 'config' function in bash and PowerShell
@@ -1091,6 +1448,10 @@ say "Notes:"
 say "- git: host-specific settings (editor, difftools, credentials, includeIf) go into ~/.overwrites/gitconfig."
 if [ "$OS" != windows ] && [ "$INSTALLED" -gt 0 ]; then
     say "- tmux: the new config takes effect when the next tmux server starts (running servers are not reloaded)."
+fi
+[ -z "$MODE_NOTE" ] || say "- $MODE_NOTE"
+if [ "$MODE" = copy ] && [ "$INSTALLED" -gt 0 ]; then
+    say "- The dotfiles are copies (listed in $COPIES_FILE): edit them in place; config sync (install.sh --adopt) takes the edits into the checkout, install.sh --check shows what differs."
 fi
 for k in "${BACKED_UP[@]+"${BACKED_UP[@]}"}"; do
     if [ "$k" = .bashrc ]; then

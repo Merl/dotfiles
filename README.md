@@ -44,7 +44,7 @@ Deliberately few shortcuts, and none shadows a real program (hence no `gs` for g
 | Editor | `v` (vim), `svim` (sudoedit) |
 | ssh | `s` = `ssh -l root` |
 | git | `g` `gst` `ga` `gap` `gc` `gca` `gco` `gsw` `gb` `gd` `gds` `gl` `gf` `gpl` `gp` `gcl` |
-| dotfiles | `config <git command>` runs git in the dotfiles checkout from anywhere (`config status`, `config diff`); `config sync [message]` commits all changes, pulls (rebase) and pushes to every remote; where the dotfiles are copies (Windows) it then runs the installer to refresh them. Also in the PowerShell profile. The checkout is found via the `~/.bashrc` link, `$DOTFILES_DIR`, or `~/.config/dotfiles/checkout` (written by `install.sh`) |
+| dotfiles | `config <git command>` runs git in the dotfiles checkout from anywhere (`config status`, `config diff`); `config check` compares the home copies with the checkout (`install.sh --check`); `config sync [message]` commits all changes, pulls (rebase) and pushes to every remote. Where the dotfiles are copies (Windows), `sync` first takes edited home copies into the checkout (`install.sh --adopt`; a conflict stops it before anything is committed) and at the end runs the installer to refresh the copies. Also in the PowerShell profile. The checkout is found via the `~/.bashrc` link (PowerShell: the profile link), `$DOTFILES_DIR`, or `~/.config/dotfiles/checkout` (written by `install.sh`) |
 | tmux | `tm` (attach/create `merl`), `txl` `txn` `txa` |
 | systemd (Linux only) | `sc` `scs` `scu` `jf` `jb` |
 | apt (Debian only) | `au` `aug` `ai` `aps` `apsh` |
@@ -63,6 +63,7 @@ The same files work in Git for Windows' Git Bash and in MSYS2; home is `C:\Users
 - Prompt: Starship if installed (`winget install Starship.Starship`), otherwise a fallback PS1 with the git branch.
 - The fzf binary for vim is downloaded by vim-plug (do-hook), on Linux and Windows.
 - Windows-specific settings (e.g. `GIT_SSH` pointing to Windows OpenSSH) belong in `~/.overwrites/bashrc.sh`.
+- Symlinks or copies: see [Links and copies on Windows](#links-and-copies-on-windows). Copies can be edited in place; `config sync` takes the edits into the checkout.
 
 ### PowerShell (7 and 5.1) and Windows Terminal
 
@@ -104,7 +105,7 @@ Run it as your normal user, not with `sudo` (it refuses to run under sudo with a
 1. **Repository.** Run outside a checkout (as in the one-liner), it clones to `$DOTFILES_DIR` (default `~/.dotfiles`): from Forgejo if `git ls-remote` over ssh authenticates (BatchMode, `StrictHostKeyChecking=accept-new`; with `--dry-run` `StrictHostKeyChecking=yes`, so a dry run never adds a host key and an unknown host simply means GitHub; in Git Bash Windows OpenSSH is tried first and then stored as `core.sshCommand`), otherwise from GitHub over https. Then it runs the `install.sh` of that checkout. An existing `$DOTFILES_DIR` is only used if one of its remotes is this repository (Forgejo or GitHub `Merl/dotfiles`, ssh or https, or `DOTFILES_REPO_URL`) and it contains `install.sh`; otherwise the bootstrap stops and asks to move it away or set `DOTFILES_DIR`. Inside a checkout it runs `git pull --ff-only` (skipped with a warning when the work tree has local changes, the branch has no upstream, or the pull fails) and restarts itself if `install.sh` changed.
 2. **Packages** (Linux): git, curl, vim, tmux, bash-completion, mc, starship. Only missing ones are installed, in one call of apt-get (with `apt-get update` first), dnf, pacman, zypper or brew. If apt has never downloaded its package lists (fresh container/VM), whether starship comes from apt is decided after `apt-get update`. Root: directly as root, otherwise `sudo -v` (asks for the password). Without root, missing system packages are reported and the run continues. starship is installed into `~/.local/bin` with the official installer when the package manager has no package for it or there is no root. Git Bash: nothing (`install.ps1` uses winget); MSYS2 with pacman: tmux, vim, mc, bash-completion.
 3. **Dotfiles:** an explicit list of files from the repo into `$HOME`.
-   - **Linux:** symlinks to the repo, so `git pull` updates them. **Windows (Git Bash/MSYS2/Cygwin):** copies (symlinks would need developer mode). `--copy` forces copies on Linux too.
+   - **Linux:** symlinks to the repo, so `git pull` updates them; `--copy` forces copies. **Windows (Git Bash/MSYS2/Cygwin):** symlinks or copies, see [Links and copies on Windows](#links-and-copies-on-windows).
    - Already installed (our symlink, or an identical copy) → `ok`. Anything else in the way is moved to `~/.dotfiles-backup/<YYYYmmdd-HHMMSS>/<path>` first; `installed.list` there logs what was done (each move right after it happened, and each installed copy with its SHA-256). The backup directory is only created when something changes. If installing a file fails after the move, the original is put back at once (or stays restorable with `--restore`), the run continues and exits with status 1.
    - A parent directory that is a symlink into the repository (e.g. `~/.vim -> ~/.dotfiles/.vim`) is fine: the files are then the repository files themselves (`ok`). A parent that resolves to some other place inside the repository is refused with a warning; nothing is moved or created inside the repository.
    - `.gitconfig` is installed too; host-specific git settings (editor, difftools, credential helpers, `includeIf`) belong in `~/.overwrites/gitconfig`, which it includes last.
@@ -117,7 +118,10 @@ Run it as your normal user, not with `sudo` (it refuses to run under sudo with a
 | Option | |
 |---|---|
 | `-n`, `--dry-run` | show what would happen, change nothing (the bootstrap previews from a temporary clone) |
+| `--link` | symlinks (default on Linux; on Windows they need Developer Mode or admin rights, else the run stops) |
 | `--copy` | copies instead of symlinks |
+| `--check` | compare the recorded copies with the checkout (see below); read-only, exit status 1 on a conflict |
+| `--adopt` | take edited home copies into the checkout (see below); changes nothing if there is a conflict; works with `--dry-run` |
 | `--no-packages` | skip the package step |
 | `--no-vim` | skip the vim plugins |
 | `--no-pull` | do not update the checkout |
@@ -125,6 +129,30 @@ Run it as your normal user, not with `sudo` (it refuses to run under sudo with a
 | `--restore [DIR]` | undo a run (default: newest not yet restored backup): removes our links/copies (a copy is recognised by the checksum logged at install time, so this also works after the repository changed; a file changed since is left alone with a warning) and moves the originals back. Older runs are undone one after the other with further `--restore` calls. The backup is only marked as restored when everything worked; otherwise it says what is left and can be run again. Works with `--dry-run`. |
 
 `--restore` covers the home dotfiles only. Not restored: packages, vim plugins, and what `install.ps1` changed on Windows: PowerShell profile backups in `~/.dotfiles-backup/<timestamp>/_documents/...` (move them back to `<Documents>\PowerShell\` / `<Documents>\WindowsPowerShell\` by hand) and Windows Terminal backups `settings.json.bak-<timestamp>` next to `settings.json` (copy back by hand).
+
+### Links and copies on Windows
+
+On Windows a symlink needs Developer Mode (Settings > System > For developers) or admin rights. `install.sh` and `install.ps1` decide the same way:
+
+1. `--link` / `--copy` (`install.ps1 -Link` / `-Copy`, or `DOTFILES_LINK=1` / `DOTFILES_COPY=1` for `irm | iex`),
+2. else the choice remembered in `~/.config/dotfiles/mode` (`link` or `copy`),
+3. else, if a probe in a temporary directory can create a symlink and the run is interactive (a terminal, no `--dry-run`), the question *Use symlinks instead of copies? [Y/n]*,
+4. else copies, with a note in the summary (how to enable Developer Mode, or that `--link` would work).
+
+An option or an answer is remembered in `~/.config/dotfiles/mode`; the fallback in 4. is not, so a later run asks once symlinks have become possible. `install.ps1` decides first and passes `--link`/`--copy` on to `install.sh`. In link mode `install.sh` creates real NTFS symlinks (`MSYS=winsymlinks:nativestrict`, never MSYS' copy fallback) and `install.ps1` links both PowerShell profiles to `windows/Microsoft.PowerShell_profile.ps1` in the checkout. A remembered `link` on a host where symlinks do not work falls back to copies with a warning; an explicit `--link` stops instead. Switching works in both directions: what is in the way (a copy, or a link when switching to copies) is backed up to `~/.dotfiles-backup/<timestamp>/` and replaced.
+
+**Copies can be edited in place.** Every copy is recorded in `~/.config/dotfiles/copies.list` (`install.sh` its files, `install.ps1` the two profiles): source relative to the checkout, target (on Windows as `C:/Users/...`), SHA-256 as installed; links and removed files drop out of it. `install.sh --check` (`config check`, `install.ps1 -Check`) compares each copy (H) and its checkout file (R) with the recorded checksum (S); `install.sh --adopt` (`install.ps1 -Adopt`, and the first step of `config sync` where the dotfiles are copies) acts on it:
+
+| State | `--check` reports | `--adopt` |
+|---|---|---|
+| H = S, R = S | unchanged | nothing |
+| H = S, R ≠ S | checkout newer (e.g. after a pull) | nothing; the next install refreshes the copy |
+| H ≠ S, R = S | home copy changed | copies the home file into the checkout (`cp -p`), updates S |
+| H = R, S differs | in sync | updates S |
+| H ≠ S, R ≠ S, H ≠ R | **conflict** (both paths shown) | nothing at all; exit status 1 |
+| target missing, or now a link | missing / skip | nothing |
+
+Copies of one source (the two PowerShell profiles): if only one changed, or both the same way, that change is adopted; changed differently is a conflict. `--adopt` only writes to plain files inside the checkout (no `..`, no symlinked directories) and respects `--dry-run`. A plain install still replaces an edited copy (with a warning; the edited version is in the backup), so take edits in with `config sync` or `--adopt` first. `--restore` removes the copies it takes away from `copies.list`.
 
 Environment: `DOTFILES_DIR` (checkout location), `DOTFILES_REPO_URL` (clone source instead of Forgejo/GitHub, e.g. `file:///tmp/dotfiles` for tests), `DOTFILES_NO_SUDO=1` (act as if there were no root, for tests).
 
@@ -134,9 +162,9 @@ Runs on Windows PowerShell 5.1 and PowerShell 7 (ASCII-only file). Steps:
 
 1. **winget:** `Git.Git`, `Starship.Starship`, `DEVCOM.JetBrainsMonoNerdFont`; only missing ones are installed, then `PATH` is reloaded from the registry. Without winget it says how to get it.
 2. **Repository:** invoked via `irm | iex` (no script file) it clones to `$HOME\.dotfiles` (Forgejo via Windows OpenSSH if that authenticates, else GitHub; a dry run previews from a temporary clone that is removed afterwards, also on Ctrl-C) or updates an existing checkout, then runs the checkout's `install.ps1` in a child process (`-ExecutionPolicy Bypass`); that one prints the summary including what the bootstrap did. Run from a checkout, the `git pull --ff-only` (as in `install.sh`) comes first, before winget, and if it changed `install.ps1`, the new version is started with the same options (without pulling again).
-3. **PowerShell profile:** `windows/Microsoft.PowerShell_profile.ps1` is copied to `<Documents>\PowerShell\` and `<Documents>\WindowsPowerShell\`; a different existing file is moved to `$HOME\.dotfiles-backup\<timestamp>\_documents\...` first.
+3. **PowerShell profile:** `windows/Microsoft.PowerShell_profile.ps1` is linked (link mode) or copied to `<Documents>\PowerShell\` and `<Documents>\WindowsPowerShell\`; a different existing file (or link) is moved to `$HOME\.dotfiles-backup\<timestamp>\_documents\...` first. Copies are recorded in `copies.list`. Links or copies: see [Links and copies on Windows](#links-and-copies-on-windows) (the question, if any, comes before winget).
 4. **Windows Terminal** (`settings.json` of the Store, Preview and unpackaged versions): `profiles.defaults.font.face = "JetBrainsMono NF"`, a profile `serenity` running `C:\Windows\System32\OpenSSH\ssh.exe -A merl@serenity.shelltec.de`, and PowerShell 7 as `defaultProfile` if that profile exists. Written only if something differs, after a backup `settings.json.bak-<timestamp>`, as UTF-8 without BOM. A file with comments is not rewritten; the needed changes are listed instead.
-5. **Git Bash:** `install.sh --no-packages --no-pull` (plus `--pinned`, `--dry-run`) with the same `HOME` (dotfiles as copies, vim plugins).
+5. **Git Bash:** `install.sh --no-packages --no-pull` (plus `--link`/`--copy` when a choice was made, `--pinned`, `--dry-run`) with the same `HOME` (dotfiles, vim plugins).
 
 Errors (install.sh or a child run failed, clone failed) are listed in the summary; run as a file, the exit code is then 1. There is no `param()` block, so `irm | iex` leaves the caller's variables alone; when run as a file, the options are read from the arguments.
 
@@ -147,6 +175,10 @@ Errors (install.sh or a child run failed, clone failed) are listed in the summar
 | `-NoTerminal` | `DOTFILES_NO_TERMINAL=1` | leave Windows Terminal alone |
 | `-NoBash` | `DOTFILES_NO_BASH=1` | skip `install.sh` |
 | `-Pinned` | `DOTFILES_PINNED=1` | vim plugins at the snapshot commits (`install.sh --pinned`) |
+| `-Link` | `DOTFILES_LINK=1` | symlinks (needs Developer Mode or admin rights) |
+| `-Copy` | `DOTFILES_COPY=1` | copies |
+| `-Check` | | only `install.sh --check` via Git Bash (compare the copies with the checkout) |
+| `-Adopt` | | only `install.sh --adopt` via Git Bash (with `-DryRun`: preview) |
 | `-HomeDir` | `DOTFILES_HOME` | home directory (tests) |
 | `-DocumentsDir` | `DOTFILES_DOCUMENTS` | Documents folder (tests) |
 | `-TerminalSettings` | `DOTFILES_TERMINAL_SETTINGS` | one `settings.json` to edit (tests) |

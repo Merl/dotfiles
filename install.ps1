@@ -11,15 +11,26 @@
 #   2. clone (Forgejo via Windows OpenSSH if it authenticates, else GitHub)
 #      or update (git pull --ff-only) the repository
 #   3. PowerShell profile -> <Documents>\PowerShell and <Documents>\WindowsPowerShell
+#      (symlinks to the checkout in link mode, else copies)
 #   4. Windows Terminal settings.json: font, 'serenity' ssh profile, default profile
 #   5. Git Bash: install.sh --no-packages (home dotfiles, vim plugins)
 #
+# Links or copies: -Link / -Copy, else the choice remembered in
+# ~/.config/dotfiles/mode, else a question if symlinks can be created
+# (Developer Mode or admin) and the console is interactive, else copies.
+# A choice (option or answer) is remembered and passed on to install.sh.
+# Copies are recorded in ~/.config/dotfiles/copies.list (see install.sh).
+#
 # Options (run as a file): -DryRun -NoPackages -NoTerminal -NoBash -Pinned
-#   -HomeDir DIR -DocumentsDir DIR -TerminalSettings FILE -DotfilesDir DIR
+#   -Link -Copy -HomeDir DIR -DocumentsDir DIR -TerminalSettings FILE
+#   -DotfilesDir DIR
+#   -Check / -Adopt: only run install.sh --check / --adopt (compare the
+#   recorded copies with the checkout / take edited copies into it)
 # Options cannot be passed through "irm | iex"; use environment variables:
 #   DOTFILES_DRYRUN=1, DOTFILES_NO_PACKAGES=1, DOTFILES_NO_TERMINAL=1,
-#   DOTFILES_NO_BASH=1, DOTFILES_PINNED=1, DOTFILES_HOME, DOTFILES_DOCUMENTS,
-#   DOTFILES_TERMINAL_SETTINGS, DOTFILES_DIR, DOTFILES_REPO_URL (clone source)
+#   DOTFILES_NO_BASH=1, DOTFILES_PINNED=1, DOTFILES_LINK=1, DOTFILES_COPY=1,
+#   DOTFILES_HOME, DOTFILES_DOCUMENTS, DOTFILES_TERMINAL_SETTINGS,
+#   DOTFILES_DIR, DOTFILES_REPO_URL (clone source)
 #
 # There is deliberately no param() block: under "irm | iex" it would assign
 # $DryRun etc. in the caller's session. The options are parsed from $args.
@@ -50,15 +61,17 @@ $SshProfile   = 'serenity'
 $SshCommand   = 'C:\Windows\System32\OpenSSH\ssh.exe -A merl@serenity.shelltec.de'
 $Pwsh7Guid    = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
 $ProfileRel   = 'windows\Microsoft.PowerShell_profile.ps1'
+$ProfileKey   = 'windows/Microsoft.PowerShell_profile.ps1'   # source in copies.list
 $ProfileDirs  = @('PowerShell', 'WindowsPowerShell')
 
 # ---------------------------------------------------------------------------
 # options: arguments (run as a file), else environment variables (irm | iex)
 # ---------------------------------------------------------------------------
-$SwitchNames = @('DryRun', 'NoPackages', 'NoTerminal', 'NoBash', 'Pinned')
+$SwitchNames = @('DryRun', 'NoPackages', 'NoTerminal', 'NoBash', 'Pinned', 'Link', 'Copy', 'Check', 'Adopt')
 $ValueNames  = @('HomeDir', 'DocumentsDir', 'TerminalSettings', 'DotfilesDir')
-$Usage = 'Usage: install.ps1 [-DryRun] [-NoPackages] [-NoTerminal] [-NoBash] [-Pinned] ' +
-         '[-HomeDir DIR] [-DocumentsDir DIR] [-TerminalSettings FILE] [-DotfilesDir DIR]'
+$Usage = 'Usage: install.ps1 [-DryRun] [-NoPackages] [-NoTerminal] [-NoBash] [-Pinned] [-Link|-Copy] ' +
+         '[-HomeDir DIR] [-DocumentsDir DIR] [-TerminalSettings FILE] [-DotfilesDir DIR]; ' +
+         'install.ps1 -Check|-Adopt [-DryRun]'
 
 # ConvertFrom-ArgList ARGS: hashtable of the options in ARGS
 #   -Name, -Name:$true/$false for switches; -Name VALUE or -Name:VALUE
@@ -118,12 +131,20 @@ $NoPackages = $P.NoPackages -or (Get-EnvFlag 'DOTFILES_NO_PACKAGES')
 $NoTerminal = $P.NoTerminal -or (Get-EnvFlag 'DOTFILES_NO_TERMINAL')
 $NoBash     = $P.NoBash     -or (Get-EnvFlag 'DOTFILES_NO_BASH')
 $Pinned     = $P.Pinned     -or (Get-EnvFlag 'DOTFILES_PINNED')
+$LinkOpt    = $P.Link       -or (Get-EnvFlag 'DOTFILES_LINK')
+$CopyOpt    = $P.Copy       -or (Get-EnvFlag 'DOTFILES_COPY')
+$Check      = $P.Check
+$Adopt      = $P.Adopt
+if ($LinkOpt -and $CopyOpt) { throw "-Link and -Copy exclude each other. $Usage" }
+if ($Check -and $Adopt) { throw "-Check and -Adopt exclude each other. $Usage" }
 $NoPull     = Get-EnvFlag 'DOTFILES_NO_PULL'      # internal: set for child runs
 $HomeDir    = Select-First $P.HomeDir (Get-EnvText 'DOTFILES_HOME') $HOME
 $DocsDir    = Select-First $P.DocumentsDir (Get-EnvText 'DOTFILES_DOCUMENTS') ([Environment]::GetFolderPath('MyDocuments'))
 $WtOverride = Select-First $P.TerminalSettings (Get-EnvText 'DOTFILES_TERMINAL_SETTINGS')
 $TargetDir  = Select-First $P.DotfilesDir (Get-EnvText 'DOTFILES_DIR') (Join-Path $HomeDir '.dotfiles')
 $RepoUrl    = Get-EnvText 'DOTFILES_REPO_URL'
+$ModeFile   = Join-Path $HomeDir '.config\dotfiles\mode'
+$CopiesFile = Join-Path $HomeDir '.config\dotfiles\copies.list'
 
 # a dry run only probes hosts that are already in known_hosts
 $SshOpts = if ($DryRun) { '-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=yes' }
@@ -135,7 +156,10 @@ $Changes  = New-Object System.Collections.Generic.List[string]
 $Warnings = New-Object System.Collections.Generic.List[string]
 $Errors   = New-Object System.Collections.Generic.List[string]
 $Manual   = New-Object System.Collections.Generic.List[string]
-$S = @{ Git = $null; Rerun = $false; ChildCode = 0 }   # shared state for the functions below
+$Notes    = New-Object System.Collections.Generic.List[string]
+# shared state for the functions below; Mode: 'link' or 'copy', ModeArg: the
+# option for install.sh ('' = let it decide, e.g. no choice was made)
+$S = @{ Git = $null; Rerun = $false; ChildCode = 0; LinksOk = $null; Mode = 'copy'; ModeArg = '' }
 
 # changes/warnings/errors handed over by a parent run (bootstrap, restart)
 foreach ($pair in @(@('DOTFILES_CHANGES', $Changes), @('DOTFILES_WARNINGS', $Warnings), @('DOTFILES_ERRORS', $Errors))) {
@@ -171,6 +195,8 @@ function Get-ForwardArgs([switch]$AddNoPackages) {
     if ($NoTerminal) { $a += '-NoTerminal' }
     if ($NoBash)     { $a += '-NoBash' }
     if ($Pinned)     { $a += '-Pinned' }
+    if ($LinkOpt)    { $a += '-Link' }
+    if ($CopyOpt)    { $a += '-Copy' }
     if ($DryRun)     { $a += '-DryRun' }
     return $a
 }
@@ -351,6 +377,151 @@ function Update-Checkout([string]$Dir) {
 }
 
 # ---------------------------------------------------------------------------
+# links or copies
+# ---------------------------------------------------------------------------
+# New-Symlink LINK TARGET: create a file symlink; $true on success
+function New-Symlink([string]$Link, [string]$Target) {
+    try {
+        New-Item -ItemType SymbolicLink -Path $Link -Value $Target -ErrorAction Stop | Out-Null
+        return $true
+    } catch { }
+    # Windows PowerShell 5.1 does not pass the flag that lets Developer Mode
+    # create symlinks without admin rights; ask CreateSymbolicLink directly
+    try {
+        if (-not ('DotfilesInstall.Native' -as [type])) {
+            Add-Type -Namespace DotfilesInstall -Name Native -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+[return: MarshalAs(UnmanagedType.I1)]
+public static extern bool CreateSymbolicLink(string link, string target, int flags);
+'@
+        }
+        # 2 = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
+        return [DotfilesInstall.Native]::CreateSymbolicLink($Link, $Target, 2)
+    } catch { return $false }
+}
+
+# Test-Symlinks: symlinks can be created here (probed once in a temp dir)
+function Test-Symlinks {
+    if ($null -ne $S.LinksOk) { return $S.LinksOk }
+    $S.LinksOk = $false
+    $d = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-probe-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $d | Out-Null
+        $f = Join-Path $d 'file'
+        [IO.File]::WriteAllText($f, '')
+        $l = Join-Path $d 'link'
+        if ((New-Symlink $l $f) -and (Get-Item -LiteralPath $l -Force).LinkType -eq 'SymbolicLink') { $S.LinksOk = $true }
+    } catch {
+    } finally {
+        Remove-Item -Recurse -Force -LiteralPath $d -ErrorAction SilentlyContinue
+    }
+    return $S.LinksOk
+}
+
+# Select-Mode: sets $S.Mode and $S.ModeArg: -Link/-Copy, else the mode file,
+# else ask (interactive console, links possible, no dry run), else copies.
+# Only a choice (option or answer) is remembered, so that a later run still
+# asks once links have become possible.
+function Select-Mode {
+    $remembered = ''
+    if (Test-Path -LiteralPath $ModeFile -PathType Leaf) { $remembered = ([IO.File]::ReadAllText($ModeFile)).Trim() }
+    if (@('link', 'copy') -notcontains $remembered) { $remembered = '' }
+    $mode = ''
+    $remember = $false
+    if ($LinkOpt) { $mode = 'link'; $remember = $true }
+    elseif ($CopyOpt) { $mode = 'copy'; $remember = $true }
+    elseif ($remembered) { $mode = $remembered }
+    elseif (-not $DryRun -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and (Test-Symlinks)) {
+        Write-Host 'Symlinks work here: edits in your home then go straight into the checkout.'
+        $a = Read-Host 'Use symlinks instead of copies? [Y/n]'
+        if ($a -match '^[nN]') { $mode = 'copy' } else { $mode = 'link' }
+        $remember = $true
+    } else {
+        $mode = 'copy'
+        if (Test-Symlinks) {
+            $Notes.Add('copies are used; symlinks would work here: install.ps1 -Link switches to them.')
+        } else {
+            $Notes.Add('copies are used; symlinks are not possible here. For symlinks enable Developer Mode (Settings > System > For developers), then run install.ps1 -Link.')
+        }
+    }
+    if ($mode -eq 'link' -and -not (Test-Symlinks)) {
+        if ($LinkOpt) { throw '-Link: symlinks cannot be created here; enable Developer Mode (Settings > System > For developers) or use -Copy' }
+        Add-Warning "$ModeFile says link, but symlinks cannot be created here (Developer Mode off?); using copies this time (-Copy makes that the choice)"
+        $S.Mode = 'copy'
+        $S.ModeArg = ''          # install.sh sees the same and says so itself
+        return
+    }
+    $S.Mode = $mode
+    if ($remember -or $remembered) { $S.ModeArg = "--$mode" }
+    if ($remember -and $remembered -ne $mode) {
+        Write-Act 'write' 'mode' "${ModeFile}: $mode"
+        if (-not $DryRun) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $ModeFile) | Out-Null
+            [IO.File]::WriteAllText($ModeFile, "$mode`n")
+            $Changes.Add("mode $mode recorded in $ModeFile")
+        }
+    }
+}
+
+# copies.list: see install.sh. This script owns the lines of $ProfileKey and
+# keeps all others; lines sorted ordinally, like install.sh (LC_ALL=C sort).
+function Get-Sha256([string]$File) {
+    return (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+function Get-ListPath([string]$Path) { return ($Path -replace '\\', '/') }
+
+# Read-Copies: the entry lines of copies.list
+function Read-Copies {
+    $lines = @()
+    if (Test-Path -LiteralPath $CopiesFile -PathType Leaf) {
+        foreach ($l in [IO.File]::ReadAllLines($CopiesFile)) {
+            if ($l -and -not $l.StartsWith('#')) { $lines += $l.TrimEnd("`r") }
+        }
+    }
+    return $lines
+}
+
+# Get-RecordedSum TARGET: the checksum copies.list has for TARGET, or ''
+function Get-RecordedSum([string]$Target) {
+    $t = Get-ListPath $Target
+    foreach ($l in (Read-Copies)) {
+        $f = $l -split "`t"
+        if ($f.Count -ge 3 -and $f[1] -eq $t) { return $f[2] }
+    }
+    return ''
+}
+
+# Update-Copies ENTRIES: replace the $ProfileKey lines of copies.list
+function Update-Copies([string[]]$Entries) {
+    $Entries = @($Entries | Where-Object { $_ })
+    if ($Entries.Count -eq 0 -and -not (Test-Path -LiteralPath $CopiesFile)) { return }
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($l in (Read-Copies)) { if (-not $l.StartsWith("$ProfileKey`t")) { [void]$set.Add($l) } }
+    foreach ($l in $Entries) { [void]$set.Add($l) }
+    $sorted = [string[]]@($set)
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    $text = "# dotfiles installed as copies (written by install.sh and install.ps1)`n" +
+            "# source (relative to the checkout)<TAB>target<TAB>sha256 as installed`n"
+    foreach ($l in $sorted) { $text += "$l`n" }
+    if ((Test-Path -LiteralPath $CopiesFile) -and [IO.File]::ReadAllText($CopiesFile) -eq $text) {
+        Write-Act 'ok' 'copies list' $CopiesFile
+        return
+    }
+    Write-Act 'write' 'copies list' $CopiesFile
+    New-Item -ItemType Directory -Force -Path (Split-Path $CopiesFile) | Out-Null
+    [IO.File]::WriteAllText($CopiesFile, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Test-LinkTo ITEM FILE: ITEM is a symlink to FILE
+function Test-LinkTo($Item, [string]$File) {
+    if (-not $Item -or $Item.LinkType -ne 'SymbolicLink') { return $false }
+    $t = [string](@($Item.Target)[0])
+    if (-not $t) { return $false }
+    if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path $Item.FullName) $t }
+    return ([IO.Path]::GetFullPath($t) -eq [IO.Path]::GetFullPath($File))
+}
+
+# ---------------------------------------------------------------------------
 # 3. PowerShell profile
 # ---------------------------------------------------------------------------
 function Install-PsProfile([string]$Repo) {
@@ -358,30 +529,58 @@ function Install-PsProfile([string]$Repo) {
     $src = Join-Path $Repo $ProfileRel
     $name = Split-Path $src -Leaf
     $srcBytes = [IO.File]::ReadAllBytes($src)
+    $mode = $S.Mode
+    $entries = @()
     foreach ($d in $ProfileDirs) {
         $target = Join-Path (Join-Path $DocsDir $d) $name
         $key = "_documents\$d\$name"
-        if (Test-Path -LiteralPath $target -PathType Leaf) {
+        # Get-Item also finds a dangling symlink (Test-Path does not)
+        $item = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        $isLink = $item -and $item.LinkType
+        if ($mode -eq 'link' -and (Test-LinkTo $item $src)) {
+            Write-Act 'ok' $target 'symlink'
+            continue
+        }
+        if ($mode -eq 'copy' -and $item -and -not $isLink -and -not $item.PSIsContainer) {
             $cur = [IO.File]::ReadAllBytes($target)
             if ([Convert]::ToBase64String($cur) -eq [Convert]::ToBase64String($srcBytes)) {
                 Write-Act 'ok' $target
+                $entries += "$ProfileKey`t$(Get-ListPath $target)`t$(Get-Sha256 $target)"
                 continue
             }
-            $backup = Join-Path (Join-Path (Join-Path $HomeDir '.dotfiles-backup') $Stamp) $key
-            Write-Act 'backup+copy' $target "old file -> $backup"
+        }
+        $backup = Join-Path (Join-Path (Join-Path $HomeDir '.dotfiles-backup') $Stamp) $key
+        if ($item) {
+            $kind = if ($isLink) { 'symlink' } else { 'file' }
+            if (-not $isLink -and -not $item.PSIsContainer) {
+                $sum = Get-RecordedSum $target
+                if ($sum -and (Get-Sha256 $target) -ne $sum) {
+                    Add-Warning "$target was edited since it was installed; that version goes to $backup (to keep such edits run install.ps1 -Adopt first, or config sync)"
+                }
+            }
+            Write-Act "backup+$mode" $target "old $kind -> $backup"
             if (-not $DryRun) {
                 New-Item -ItemType Directory -Force -Path (Split-Path $backup) | Out-Null
                 Move-Item -LiteralPath $target -Destination $backup
             }
         } else {
-            Write-Act 'copy' $target
+            Write-Act $mode $target
         }
-        if (-not $DryRun) {
-            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+        if ($DryRun) { continue }
+        New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+        if ($mode -eq 'link') {
+            if (-not (New-Symlink $target $src)) {
+                Add-Error "could not create the symlink $target -> $src"
+                if ($item) { Move-Item -LiteralPath $backup -Destination $target }
+                continue
+            }
+        } else {
             Copy-Item -LiteralPath $src -Destination $target
-            $Changes.Add("PowerShell profile -> $target")
+            $entries += "$ProfileKey`t$(Get-ListPath $target)`t$(Get-Sha256 $target)"
         }
+        $Changes.Add("PowerShell profile -> $target ($mode)")
     }
+    if (-not $DryRun) { Update-Copies $entries }
 }
 
 # ---------------------------------------------------------------------------
@@ -578,6 +777,7 @@ function Invoke-BashInstall([string]$Repo) {
     $bash = Get-GitBash
     if (-not $bash) { Add-Warning 'Git Bash (bash.exe) not found; home dotfiles not installed'; return }
     $argList = @((($Repo -replace '\\', '/') + '/install.sh'), '--no-packages', '--no-pull')
+    if ($S.ModeArg) { $argList += $S.ModeArg }
     if ($DryRun) { $argList += '--dry-run' }
     if ($Pinned) { $argList += '--pinned' }
     Write-Host "running: $bash $($argList -join ' ')  (HOME=$HomeDir)"
@@ -601,6 +801,27 @@ function Invoke-BashInstall([string]$Repo) {
     if ($code -ne 0) { Add-Error "install.sh failed (exit $code)" }
 }
 
+# Invoke-BashCheck REPO: install.sh --check or --adopt (-Check, -Adopt);
+# sets $S.ChildCode to its exit code (1: conflict)
+function Invoke-BashCheck([string]$Repo) {
+    $bash = Get-GitBash
+    if (-not $bash) { Write-Host 'ERROR: Git Bash (bash.exe) not found' -ForegroundColor Red; $S.ChildCode = 1; return }
+    $argList = @((($Repo -replace '\\', '/') + '/install.sh'))
+    if ($Adopt) { $argList += '--adopt' } else { $argList += '--check' }
+    if ($DryRun) { $argList += '--dry-run' }
+    $oldHome = $env:HOME
+    $old = $ErrorActionPreference
+    try {
+        $env:HOME = ($HomeDir -replace '\\', '/')
+        $ErrorActionPreference = 'Continue'
+        & $bash @argList | ForEach-Object { Write-Host "$_" }
+        $S.ChildCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $old
+        $env:HOME = $oldHome
+    }
+}
+
 # ---------------------------------------------------------------------------
 # summary
 # ---------------------------------------------------------------------------
@@ -618,6 +839,7 @@ function Write-Summary {
     foreach ($m in $Manual)   { Write-Host "- manual: $m" }
     foreach ($w in $Warnings) { Write-Host "- warning: $w" }
     foreach ($e in $Errors)   { Write-Host "- error: $e" -ForegroundColor Red }
+    foreach ($n in $Notes)    { Write-Host "- $n" }
     Write-Host '- Open a new PowerShell / Windows Terminal window to pick up profile, font and PATH changes.'
     if ($Errors.Count -gt 0) { return 1 }
     return 0
@@ -635,6 +857,16 @@ if ($ScriptFile) {
     if (Test-Checkout $d) { $Repo = (Resolve-Path -LiteralPath $d).Path }
 }
 
+if ($Check -or $Adopt) {
+    # only compare/adopt the recorded copies (install.sh --check/--adopt)
+    if (-not $Repo -and (Test-Checkout $TargetDir)) { $Repo = (Resolve-Path -LiteralPath $TargetDir).Path }
+    if (-not $Repo) { throw "-Check/-Adopt need a checkout ($TargetDir not found; set -DotfilesDir)" }
+    $S.Git = Get-Git
+    Invoke-BashCheck $Repo
+    if ($ScriptFile) { exit $S.ChildCode }
+    return
+}
+
 if ($Repo) {
     # run from a checkout: update it first; restart if install.ps1 changed
     $S.Git = Get-Git
@@ -647,6 +879,8 @@ if ($Repo) {
         }
         exit $S.ChildCode
     }
+    Select-Mode
+    Write-Host "mode $($S.Mode)"
     Install-Packages
     $S.Git = Get-Git
     Install-PsProfile $Repo
