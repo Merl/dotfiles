@@ -569,10 +569,14 @@ completion_present() {
 
 starship_present() { have starship || [ -x "$HOME/.local/bin/starship" ]; }
 
+# vim with +eval (vim-tiny lacks it and cannot run vim-plug or ~/.vimrc)
+vim_present() { have vim && vim --version 2>/dev/null | grep -q '+eval'; }
+
 dep_present() {
     case $1 in
         bash-completion) completion_present ;;
         starship)        starship_present ;;
+        vim)             vim_present ;;
         *)               have "$1" ;;
     esac
 }
@@ -880,7 +884,8 @@ fi
 # plugin directory names from the Plug lines of .vimrc
 vim_plugins() { sed -n "s/^Plug '[^']*\/\([^'/]*\)'.*/\1/p" "$REPO/.vimrc"; }
 PLUGGED=$HOME/.vim/plugged
-fzf_bin_present() { compgen -G "$PLUGGED/fzf/bin/fzf*" >/dev/null; }
+# the binary itself, not fzf-preview.sh / fzf-tmux from the same directory
+fzf_bin_present() { [ -x "$PLUGGED/fzf/bin/fzf" ] || [ -x "$PLUGGED/fzf/bin/fzf.exe" ]; }
 vim_batch() {
     # TERM=dumb disables the autoinstall in .vimrc; stdin from /dev/null
     # because vim -es reads Ex commands from stdin
@@ -925,8 +930,8 @@ pin_plugins() {
 step "Vim plugins"
 if [ "$NO_VIM" -eq 1 ]; then
     act skip "vim plugins" "--no-vim"
-elif ! have vim; then
-    act skip "vim plugins" "vim not installed"
+elif ! vim_present; then
+    act skip "vim plugins" "vim (with +eval) not installed"
 elif ! have git; then
     act skip "vim plugins" "git not installed"
 else
@@ -939,7 +944,9 @@ else
     else
         act install "vim plugins" "${missing_plugins[*]}"
         if [ "$DRY_RUN" -eq 0 ]; then
-            vim_batch '+PlugInstall --sync' || warn "vim PlugInstall returned an error (exit $?)"
+            # vim 8.x may exit 1 here (E31 from plug.vim) although all
+            # plugins were installed: only the result below counts
+            vim_batch '+PlugInstall --sync' || true
             still=()
             while IFS= read -r p; do
                 [ -d "$PLUGGED/$p" ] || still+=("$p")

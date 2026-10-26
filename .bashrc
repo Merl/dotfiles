@@ -122,7 +122,8 @@ else
         for _f in /usr/lib/git-core/git-sh-prompt \
                   /usr/share/git-core/contrib/completion/git-prompt.sh \
                   /ucrt64/share/git/completion/git-prompt.sh \
-                  /mingw64/share/git/completion/git-prompt.sh \n                  /usr/share/git/completion/git-prompt.sh; do
+                  /mingw64/share/git/completion/git-prompt.sh \
+                  /usr/share/git/completion/git-prompt.sh; do
             [ -r "$_f" ] && { . "$_f"; break; }
         done
         unset _f
