@@ -79,18 +79,24 @@ fi
 
 # config: git for the dotfiles checkout, from any directory (successor of the
 # 2018 bare-repo alias). The checkout is where ~/.bashrc links to, else
-# $DOTFILES_DIR or ~/.dotfiles.
+# $DOTFILES_DIR, else the path install.sh recorded, else ~/.dotfiles.
 #   config status | diff | log ...  any git command
 #   config sync [message]           commit all changes, pull --rebase, push
-#                                   to every remote
+#                                   to every remote; where the dotfiles are
+#                                   copies (Windows), install.sh then
+#                                   refreshes them
 # (unalias: an old 'config' alias would be expanded into this definition)
 unalias config 2>/dev/null
 config() {
     local repo r
     if [ -L "$HOME/.bashrc" ]; then
         repo=$(dirname -- "$(readlink -f -- "$HOME/.bashrc")")
+    elif [ -n "${DOTFILES_DIR-}" ]; then
+        repo=$DOTFILES_DIR
+    elif [ -s "$HOME/.config/dotfiles/checkout" ]; then
+        repo=$(cat "$HOME/.config/dotfiles/checkout")
     else
-        repo=${DOTFILES_DIR:-$HOME/.dotfiles}
+        repo=$HOME/.dotfiles
     fi
     [ "${1-}" = sync ] || { git -C "$repo" "$@"; return; }
     shift
@@ -104,6 +110,10 @@ config() {
         git -C "$repo" push -q "$r" HEAD || return
     done
     git -C "$repo" log --oneline -1
+    if [ ! -L "$HOME/.bashrc" ]; then
+        bash "$repo/install.sh" --no-packages --no-pull 2>&1 |
+            grep -E '^- (changed|warning)|nothing changed'
+    fi
 }
 
 # --- tmux: refresh environment after re-attach -----------------------------------

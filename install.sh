@@ -896,6 +896,23 @@ if [ "$INSTALLED" -gt 0 ]; then
     CHANGES+=("$INSTALLED dotfile(s) installed")
 fi
 
+# where the checkout is, for the 'config' function in bash and PowerShell
+# (needed where the dotfiles are copies, i.e. not links into the checkout)
+CHECKOUT_FILE=$HOME/.config/dotfiles/checkout
+checkout_path=$REPO_REAL
+if [ "$OS" = windows ] && have cygpath; then checkout_path=$(cygpath -m "$REPO_REAL"); fi
+if [ -n "${DOTFILES_PREVIEW_OF:-}" ]; then
+    act skip "checkout path" "preview from a temporary clone"
+elif [ "$(cat "$CHECKOUT_FILE" 2>/dev/null)" = "$checkout_path" ]; then
+    act ok "checkout path" "$CHECKOUT_FILE"
+else
+    act write "checkout path" "$CHECKOUT_FILE: $checkout_path"
+    if [ "$DRY_RUN" -eq 0 ]; then
+        mkdir -p -- "${CHECKOUT_FILE%/*}" && printf '%s\n' "$checkout_path" > "$CHECKOUT_FILE"
+        CHANGES+=("checkout path recorded in $CHECKOUT_FILE")
+    fi
+fi
+
 # =============================================================================
 # 4. vim plugins
 # =============================================================================

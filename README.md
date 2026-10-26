@@ -44,7 +44,7 @@ Deliberately few shortcuts, and none shadows a real program (hence no `gs` for g
 | Editor | `v` (vim), `svim` (sudoedit) |
 | ssh | `s` = `ssh -l root` |
 | git | `g` `gst` `ga` `gap` `gc` `gca` `gco` `gsw` `gb` `gd` `gds` `gl` `gf` `gpl` `gp` `gcl` |
-| dotfiles | `config <git command>` runs git in the dotfiles checkout from anywhere (`config status`, `config diff`); `config sync [message]` commits all changes, pulls (rebase) and pushes to every remote |
+| dotfiles | `config <git command>` runs git in the dotfiles checkout from anywhere (`config status`, `config diff`); `config sync [message]` commits all changes, pulls (rebase) and pushes to every remote; where the dotfiles are copies (Windows) it then runs the installer to refresh them. Also in the PowerShell profile. The checkout is found via the `~/.bashrc` link, `$DOTFILES_DIR`, or `~/.config/dotfiles/checkout` (written by `install.sh`) |
 | tmux | `tm` (attach/create `merl`), `txl` `txn` `txa` |
 | systemd (Linux only) | `sc` `scs` `scu` `jf` `jb` |
 | apt (Debian only) | `au` `aug` `ai` `aps` `apsh` |
