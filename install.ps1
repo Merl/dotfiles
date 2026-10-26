@@ -586,8 +586,14 @@ function Invoke-BashInstall([string]$Repo) {
     try {
         $env:HOME = ($HomeDir -replace '\\', '/')
         $ErrorActionPreference = 'Continue'
-        & $bash @argList
+        # show the output as it comes and keep it, so that the changes made
+        # by install.sh end up in this summary too
+        $lines = New-Object System.Collections.Generic.List[string]
+        & $bash @argList | ForEach-Object { $s = "$_"; Write-Host $s; $lines.Add($s) }
         $code = $LASTEXITCODE
+        foreach ($l in $lines) {
+            if ($l -match '^- (changed|would change): (.+)$') { $Changes.Add("Git Bash: $($Matches[2])") }
+        }
     } finally {
         $ErrorActionPreference = $old
         $env:HOME = $oldHome
