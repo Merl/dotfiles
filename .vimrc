@@ -1,150 +1,187 @@
-" defaults as we cannot rely on system vimrc
-set nocompatible              " be iMproved, required
-filetype off                  " required
-syntax on
+" ~/.vimrc - Vim 9.1 (Debian 13), plugins via vim-plug
+"
+" vim-plug itself is vendored in the repo: ~/.vim/autoload/plug.vim
+" (junegunn/vim-plug master 7e5aae5, 2026-10-15; latest release tag 0.14.0).
+" Plugins are installed into ~/.vim/plugged. Missing plugins are installed
+" automatically on the first interactive start (needs git and network).
+"
+" Pinned plugin commits: ~/.vim/plug-snapshot.vim
+"   restore:  vim -S ~/.vim/plug-snapshot.vim
+"   refresh:  :PlugUpdate, test, then :PlugSnapshot! ~/.vim/plug-snapshot.vim
+
+" leader first, so that all <leader> mappings below use it
+" ("," instead of "\": fewer keystrokes on a German keyboard)
+let mapleader = ","
+
+" ---------------------------------------------------------------------------
+" Plugins
+" ---------------------------------------------------------------------------
+call plug#begin('~/.vim/plugged')
+
+Plug 'tpope/vim-sensible'
+
+" file tree
+Plug 'preservim/nerdtree'
+Plug 'Xuyuanp/nerdtree-git-plugin'
+
+" status line / buffer tabline
+Plug 'vim-airline/vim-airline'
+Plug 'vim-airline/vim-airline-themes'
+
+" git
+Plug 'tpope/vim-fugitive'
+Plug 'tpope/vim-rhubarb'             " :GBrowse for GitHub
+Plug 'shumphrey/fugitive-gitlab.vim' " :GBrowse for GitLab
+
+" only used to generate ~/.tmuxline.conf (:Tmuxline, :TmuxlineSnapshot!)
+Plug 'edkolev/tmuxline.vim'
+
+" fuzzy finder; the fzf binary comes from the Debian package "fzf"
+Plug 'junegunn/fzf'
+Plug 'junegunn/fzf.vim'
+
+" rainbow parentheses
+Plug 'luochen1990/rainbow'
+
+" must be loaded last
+Plug 'ryanoasis/vim-devicons'
+
+call plug#end()   " also runs 'filetype plugin indent on' and 'syntax enable'
+
+" Install missing plugins on startup, then reload this file.
+" Skipped without git or without a usable terminal, so that a start without
+" TERM (cron, scripts, dumb terminals) cannot block on the installer.
+if executable('git') && !empty($TERM) && $TERM !=# 'dumb'
+  augroup plug_autoinstall
+    autocmd!
+    autocmd VimEnter * if len(filter(values(g:plugs), '!isdirectory(v:val.dir)'))
+          \ | PlugInstall --sync | source $MYVIMRC
+          \ | endif
+  augroup END
+endif
+
+" ---------------------------------------------------------------------------
+" Settings (vim-sensible covers the basics)
+" ---------------------------------------------------------------------------
 set background=dark
-if has("autocmd")
-  au BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
-endif
-if has("autocmd")
-  filetype plugin indent on
-endif
-set showcmd             " Show (partial) command in status line.
-set showmatch           " Show matching brackets.
-set ignorecase          " Do case insensitive matching
-set smartcase           " Do smart case matching
-set incsearch           " Incremental search
-set autowrite           " Automatically save before commands like :next and :make
-set hidden              " Hide buffers when they are abandoned
-set mouse=              " Disable mouse usage (all modes)
+set showcmd             " show (partial) command in status line
+set showmatch           " show matching brackets
+set ignorecase          " case insensitive search ...
+set smartcase           " ... unless the pattern contains upper case
+set autowrite           " save before commands like :next and :make
+set hidden              " keep abandoned buffers loaded
+set mouse=              " no mouse
+set number              " line numbers
 
-" Vundle
-" set the runtime path to include Vundle and initialize
-set rtp+=~/.vim/bundle/Vundle.vim
-call vundle#begin()
-Plugin 'VundleVim/Vundle.vim'
-
-" The following are examples of different formats supported.
-" Keep Plugin commands between vundle#begin/end.
-" plugin on GitHub repo
-"Plugin 'tpope/vim-fugitive'
-" plugin from http://vim-scripts.org/vim/scripts.html
-" Plugin 'L9'
-" Git plugin not hosted on GitHub
-"Plugin 'git://git.wincent.com/command-t.git'
-" git repos on your local machine (i.e. when working on your own plugin)
-"Plugin 'file:///home/gmarik/path/to/plugin'
-" The sparkup vim script is in a subdirectory of this repo called vim.
-" Pass the path to set the runtimepath properly.
-"Plugin 'rstacruz/sparkup', {'rtp': 'vim/'}
-" Install L9 and avoid a Naming conflict if you've already installed a
-" different version somewhere else.
-" Plugin 'ascenator/L9', {'name': 'newL9'}
-
-Plugin 'bufexplorer.zip'
-Plugin 'fholgado/minibufexpl.vim'
-Plugin 'Xuyuanp/nerdtree-git-plugin'
-Plugin 'scrooloose/nerdtree'
-Plugin 'rainbow.zip'
-Plugin 'altercation/vim-colors-solarized'
-Plugin 'tpope/vim-scriptease'
-Plugin 'tpope/vim-sensible'
-Plugin 'tpope/vim-vinegar'
-Plugin 'tpope/vim-vividchalk'
-Plugin 'tpope/vim-fugitive'
-Plugin 'tpope/vim-rhubarb'
-Plugin 'shumphrey/fugitive-gitlab.vim'
-Plugin 'vim-airline/vim-airline'
-Plugin 'vim-airline/vim-airline-themes'
-Plugin 'wincent/command-t'
-Plugin 'edkolev/tmuxline.vim'
-Plugin 'ryanoasis/vim-devicons'
-
-call vundle#end()            " required
-filetype plugin indent on    " required
-
-" pathogen - should not be neccesarry with Vundle
-" execute pathogen#infect()
-
-" whitespaces as tabs
+" indent with 4 spaces, real tabs display as 8
 set tabstop=8 softtabstop=0 expandtab shiftwidth=4 smarttab
-" treat .md as markdown
-autocmd BufNewFile,BufReadPost *.md set filetype=markdown
-" let NERDTree take over Netrw
-let NERDTreeHijackNetrw=1
-" display line numbers
-set number
 
-" Themes
-"let g:solarized_termcolors=256
-"colorscheme solarized
-"colorscheme vividchalk
-"colorscheme default
+" jump to the last known cursor position when reopening a file
+augroup vimrc_lastpos
+  autocmd!
+  autocmd BufReadPost *
+        \ if line("'\"") >= 1 && line("'\"") <= line("$") && &ft !~# 'commit'
+        \ |   exe "normal! g`\""
+        \ | endif
+augroup END
 
-" make ctrl + w in insertmode behave like in normal mode
+" endless undo
+" src: https://vi.stackexchange.com/questions/6/how-can-i-use-the-undofile
+if !isdirectory($HOME . "/.vim/undo-dir")
+  call mkdir($HOME . "/.vim/undo-dir", "p", 0700)
+endif
+set undodir=~/.vim/undo-dir
+set undofile
+
+" Inside tmux (TERM=tmux-256color) use xterm key handling, so that
+" modified keys like Ctrl+arrow work (tmux sends them xterm-style).
+if &term =~# '^tmux'
+  set term=xterm-256color
+endif
+
+" ---------------------------------------------------------------------------
+" Mappings
+" ---------------------------------------------------------------------------
+" ctrl + w in insert mode behaves like in normal mode
 imap <C-w> <C-o><C-w>
-" map + and - to de/increase window size without need for ctrl + w
+" + and - change the window height without ctrl + w
 map - <C-W>-
 map + <C-W>+
 
-" map ctrl + arrow keys to jump through windows without need for ctrl + w
+" ctrl + arrow keys / ctrl + hjkl jump between windows
 noremap <C-Down>  <C-W>j
 noremap <C-Up>    <C-W>k
 noremap <C-Left>  <C-W>h
 noremap <C-Right> <C-W>l
-
-" map hjkl + arrow keys to jump through windows without need for ctrl + w
 noremap <C-j> <C-W>j
 noremap <C-k> <C-W>k
 noremap <C-h> <C-W>h
 noremap <C-l> <C-W>l
 
-" map ctrl + n to toogle NERDTree
+" ---------------------------------------------------------------------------
+" NERDTree
+" ---------------------------------------------------------------------------
+let NERDTreeHijackNetrw = 1
 map <C-n> :NERDTreeToggle<CR>
 map <C-f> :NERDTreeFind<CR>
 
-" map ctrl + b to :MBEFocus
-map <C-b> :MBEFocus<CR>
+augroup vimrc_nerdtree
+  autocmd!
+  " open NERDTree only when Vim is started with a single directory argument
+  autocmd StdinReadPre * let s:std_in = 1
+  autocmd VimEnter * if exists(':NERDTree') == 2 && argc() == 1
+        \ && isdirectory(argv()[0]) && !exists('s:std_in')
+        \ | execute 'NERDTree' fnameescape(argv()[0]) | wincmd p | enew
+        \ | execute 'cd' fnameescape(argv()[0]) | endif
+  " exit Vim if NERDTree is the only window remaining in the only tab
+  autocmd BufEnter * if tabpagenr('$') == 1 && winnr('$') == 1
+        \ && exists('b:NERDTree') && b:NERDTree.isTabTree()
+        \ | call feedkeys(":quit\<CR>:\<BS>") | endif
+  " close the tab if NERDTree is the only window remaining in it
+  autocmd BufEnter * if winnr('$') == 1 && exists('b:NERDTree')
+        \ && b:NERDTree.isTabTree()
+        \ | call feedkeys(":quit\<CR>:\<BS>") | endif
+augroup END
 
-" open NERDTree if empty vim is started
-autocmd StdinReadPre * let s:std_in=1
-autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
+" ---------------------------------------------------------------------------
+" fzf (degrades to built-in commands when the fzf binary is missing)
+" ---------------------------------------------------------------------------
+if executable('fzf')
+  nnoremap <C-p>     :Files<CR>
+  nnoremap <leader>b :Buffers<CR>
+else
+  nnoremap <C-p>     :echo "fzf not installed (apt install fzf)"<CR>
+  nnoremap <leader>b :ls<CR>:buffer<Space>
+endif
 
-" open NERDTree if dir is opened
-autocmd VimEnter * if argc() == 1 && isdirectory(argv()[0]) && !exists("s:std_in") | exe 'NERDTree' argv()[0] | wincmd p | ene | endif
-
-" close vim if NERDTree is last open window
-autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
-
-" enable airline tab theme
+" ---------------------------------------------------------------------------
+" airline / tmuxline / rainbow
+" ---------------------------------------------------------------------------
+let g:airline_theme = 'dark'
+" buffers as tabs at the top
 let g:airline#extensions#tabline#enabled = 1
-" airline use powerline font
+" powerline symbols (needs a Nerd Font or powerline font)
 let g:airline_powerline_fonts = 1
-" disable overwriting tmux line on vim start
+" do not overwrite the tmux status line on vim start; ~/.tmuxline.conf is
+" generated explicitly with  :Tmuxline airline | TmuxlineSnapshot! ~/.tmuxline.conf
 let g:airline#extensions#tmuxline#enabled = 0
+let g:tmuxline_powerline_separators = 1
+let g:tmuxline_preset = {
+      \ 'a'    : '#S',
+      \ 'b'    : '#W',
+      \ 'c'    : '#H',
+      \ 'win'  : '#I #W',
+      \ 'cwin' : '#I #W',
+      \ 'x'    : '#(cut -d " " -f 1-3 /proc/loadavg)',
+      \ 'y'    : '%a',
+      \ 'z'    : '%d.%m.%Y  %H:%M:%S',
+      \ 'options' : {'status-justify' : 'centre'}}
 
-" map the leader to "," instead of "\" (less keystrokes on german keyboard)
-let mapleader = ","
+let g:rainbow_active = 1
 
-" set vim to xterm-256color mode if tmux-256color is set
-if &term == "tmux-256color"
-    set term=xterm-256color
+" ---------------------------------------------------------------------------
+" host-specific additions
+" ---------------------------------------------------------------------------
+if filereadable(expand("~/.overwrites/vimrc"))
+  source ~/.overwrites/vimrc
 endif
-
-" vim endless undo
-" src: https://vi.stackexchange.com/questions/6/how-can-i-use-the-undofile
-if !isdirectory($HOME."/.vim")
-    call mkdir($HOME."/.vim", "", 0770)
-endif
-if !isdirectory($HOME."/.vim/undo-dir")
-    call mkdir($HOME."/.vim/undo-dir", "", 0700)
-endif
-set undodir=~/.vim/undo-dir
-set undofile
-
-
-let $LOCALFILE=expand("~/.overwrites/vimrc")
-if filereadable($LOCALFILE)
-    source $LOCALFILE
-endif
- 
