@@ -1,4 +1,4 @@
-" ~/.vimrc - Vim 9.1 (Debian 13), plugins via vim-plug
+" ~/.vimrc - Vim 9.1+ (Debian 13, Git Bash/MSYS2), plugins via vim-plug
 "
 " vim-plug itself is vendored in the repo: ~/.vim/autoload/plug.vim
 " (junegunn/vim-plug master 7e5aae5, 2026-10-15; latest release tag 0.14.0).
@@ -36,8 +36,9 @@ Plug 'shumphrey/fugitive-gitlab.vim' " :GBrowse for GitLab
 " only used to generate ~/.tmuxline.conf (:Tmuxline, :TmuxlineSnapshot!)
 Plug 'edkolev/tmuxline.vim'
 
-" fuzzy finder; the fzf binary comes from the Debian package "fzf"
-Plug 'junegunn/fzf'
+" fuzzy finder; the do-hook downloads a matching fzf binary into the plugin
+" (Linux and Windows), so no system package is needed
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
 " rainbow parentheses
@@ -51,11 +52,13 @@ call plug#end()   " also runs 'filetype plugin indent on' and 'syntax enable'
 " Install missing plugins on startup, then reload this file.
 " Skipped without git or without a usable terminal, so that a start without
 " TERM (cron, scripts, dumb terminals) cannot block on the installer.
+" path of this file; $MYVIMRC is empty when started with -u
+let s:vimrc = expand('<sfile>:p')
 if executable('git') && !empty($TERM) && $TERM !=# 'dumb'
   augroup plug_autoinstall
     autocmd!
     autocmd VimEnter * if len(filter(values(g:plugs), '!isdirectory(v:val.dir)'))
-          \ | PlugInstall --sync | source $MYVIMRC
+          \ | PlugInstall --sync | execute 'source' fnameescape(s:vimrc)
           \ | endif
   augroup END
 endif
@@ -146,11 +149,12 @@ augroup END
 " ---------------------------------------------------------------------------
 " fzf (degrades to built-in commands when the fzf binary is missing)
 " ---------------------------------------------------------------------------
-if executable('fzf')
+" binary from PATH or from the fzf plugin's do-hook (bin/fzf, bin/fzf.exe)
+if executable('fzf') || !empty(glob(expand('~/.vim/plugged/fzf/bin/fzf*')))
   nnoremap <C-p>     :Files<CR>
   nnoremap <leader>b :Buffers<CR>
 else
-  nnoremap <C-p>     :echo "fzf not installed (apt install fzf)"<CR>
+  nnoremap <C-p>     :echo "fzf binary missing (:call fzf#install())"<CR>
   nnoremap <leader>b :ls<CR>:buffer<Space>
 endif
 

@@ -21,7 +21,7 @@ alias h='history'
 
 # --- Editor ------------------------------------------------------------------
 alias v='vim'
-alias svim='sudoedit'
+command_exists sudoedit && alias svim='sudoedit'
 
 # --- ssh ---------------------------------------------------------------------
 alias s='ssh -l root'
@@ -45,9 +45,12 @@ alias gp='git push'
 alias gcl='git clone'
 
 # --- tmux --------------------------------------------------------------------
-alias txl='tmux ls'
-alias txn='tmux new -s'
-alias txa='tmux attach -t'
+# tm is always defined and reports a missing tmux (Git Bash has none)
+if command_exists tmux; then
+    alias txl='tmux ls'
+    alias txn='tmux new -s'
+    alias txa='tmux attach -t'
+fi
 # tm [session]: attach to (or create) session "merl", see ~/.sbin/tmux-merl.sh
 tm() { "$HOME/.sbin/tmux-merl.sh" "$@"; }
 
@@ -96,7 +99,10 @@ ips() {
     if command_exists ip; then
         ip -br addr
     else
-        ipconfig | grep -i 'IPv[46]'
+        # Windows: ipconfig prints in the console code page (e.g. CP850)
+        local cp
+        cp=$(chcp.com 2>/dev/null | tr -dc '0-9')
+        ipconfig | iconv -f "CP${cp:-850}" -t UTF-8 | grep -i 'IPv[46]'
     fi
 }
 

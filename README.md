@@ -10,6 +10,7 @@ The repository root mirrors `$HOME`: every file lives at the path it ends up at 
 
 | File | Purpose |
 |---|---|
+| `.bash_profile` | bash login shells: only sources `.profile` |
 | `.profile` | login shell; sets PATH, sources `.bashrc` |
 | `.bashrc` | interactive bash |
 | `.bash_aliases` | aliases and small functions (see below) |
@@ -39,6 +40,16 @@ Deliberately few shortcuts, and none shadows a real program (hence no `gs` for g
 Tab completion comes from the system package `bash-completion` (git, ssh, tmux, make, systemctl, apt).
 
 Host-specific additions live outside the repo in `~/.overwrites/` (`bashrc.sh`, `tmux.sh`). tmux is not started automatically at login.
+
+## Windows (Git Bash / MSYS2)
+
+The same files work in Git for Windows' Git Bash and in MSYS2; home is `C:\Users\<user>`, vim uses `~/.vim`.
+
+- tmux is not available there: `tm` reports it, `txl`/`txn`/`txa` are not defined. Use tmux on the server (or in WSL).
+- Aliases that need `sudoedit`, `systemctl` or `apt` are only defined where these exist.
+- Prompt: Starship if installed (`winget install Starship.Starship`), otherwise a fallback PS1 with the git branch.
+- The fzf binary for vim is downloaded by vim-plug (do-hook), on Linux and Windows.
+- Windows-specific settings (e.g. `GIT_SSH` pointing to Windows OpenSSH) belong in `~/.overwrites/bashrc.sh`.
 
 ## Remotes
 

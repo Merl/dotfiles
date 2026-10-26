@@ -78,7 +78,7 @@ fi
 [ -f ~/.bash_aliases ] && . ~/.bash_aliases
 
 # Dotfiles bare repo (2018 layout; legacy, harmless)
-alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
+alias config='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
 
 # --- tmux: refresh environment after re-attach -----------------------------------
 # After re-attaching from a new SSH connection, existing shells still point to
@@ -124,7 +124,7 @@ else
         for _f in /usr/lib/git-core/git-sh-prompt \
                   /usr/share/git-core/contrib/completion/git-prompt.sh \
                   /ucrt64/share/git/completion/git-prompt.sh \
-                  /mingw64/share/git/completion/git-prompt.sh; do
+                  /mingw64/share/git/completion/git-prompt.sh \n                  /usr/share/git/completion/git-prompt.sh; do
             [ -r "$_f" ] && { . "$_f"; break; }
         done
         unset _f
