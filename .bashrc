@@ -77,8 +77,34 @@ fi
 # --- Aliases and functions -----------------------------------------------------
 [ -f ~/.bash_aliases ] && . ~/.bash_aliases
 
-# Dotfiles bare repo (2018 layout; legacy, harmless)
-alias config='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
+# config: git for the dotfiles checkout, from any directory (successor of the
+# 2018 bare-repo alias). The checkout is where ~/.bashrc links to, else
+# $DOTFILES_DIR or ~/.dotfiles.
+#   config status | diff | log ...  any git command
+#   config sync [message]           commit all changes, pull --rebase, push
+#                                   to every remote
+# (unalias: an old 'config' alias would be expanded into this definition)
+unalias config 2>/dev/null
+config() {
+    local repo r
+    if [ -L "$HOME/.bashrc" ]; then
+        repo=$(dirname -- "$(readlink -f -- "$HOME/.bashrc")")
+    else
+        repo=${DOTFILES_DIR:-$HOME/.dotfiles}
+    fi
+    [ "${1-}" = sync ] || { git -C "$repo" "$@"; return; }
+    shift
+    git -C "$repo" add -A || return
+    if ! git -C "$repo" diff --cached --quiet; then
+        git -C "$repo" diff --cached --stat
+        git -C "$repo" commit -q -m "${*:-Update from ${HOSTNAME%%.*}}" || return
+    fi
+    git -C "$repo" pull -q --rebase || return
+    for r in $(git -C "$repo" remote); do
+        git -C "$repo" push -q "$r" HEAD || return
+    done
+    git -C "$repo" log --oneline -1
+}
 
 # --- tmux: refresh environment after re-attach -----------------------------------
 # tmux updates SSH_AUTH_SOCK, SSH_CONNECTION and DISPLAY in the session

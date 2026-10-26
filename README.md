@@ -25,7 +25,7 @@ The repository root mirrors `$HOME`: every file lives at the path it ends up at 
 
 ## WeeChat
 
-`~/.config/weechat` is a symlink to the whole directory in the repo, because WeeChat replaces its `.conf` files on save (write + rename), which would break single-file links. `/set …` + `/save` therefore changes the repo work tree: commit what you want to keep (while it is uncommitted, `install.sh` does not pull).
+`~/.config/weechat` is a symlink to the whole directory in the repo, because WeeChat replaces its `.conf` files on save (write + rename), which would break single-file links. `/set …` + `/save` therefore changes the repo work tree: `config diff` shows it, `config sync` commits and pushes it (while it is uncommitted, `install.sh` does not pull).
 
 - Servers: Libera.Chat, QuakeNet, IRCNet, EuIRC; connect directly (TLS except QuakeNet), autoconnect on, nicks `Merl[DT]`, `Merl[]`.
 - No secrets in the repo: passwords go into WeeChat's secured data (`/secure set libera_pw …`, then e.g. `/set irc.server.libera.sasl_password "${sec.data.libera_pw}"`); `sec.conf` is git-ignored and stays on the host.
@@ -44,6 +44,7 @@ Deliberately few shortcuts, and none shadows a real program (hence no `gs` for g
 | Editor | `v` (vim), `svim` (sudoedit) |
 | ssh | `s` = `ssh -l root` |
 | git | `g` `gst` `ga` `gap` `gc` `gca` `gco` `gsw` `gb` `gd` `gds` `gl` `gf` `gpl` `gp` `gcl` |
+| dotfiles | `config <git command>` runs git in the dotfiles checkout from anywhere (`config status`, `config diff`); `config sync [message]` commits all changes, pulls (rebase) and pushes to every remote |
 | tmux | `tm` (attach/create `merl`), `txl` `txn` `txa` |
 | systemd (Linux only) | `sc` `scs` `scu` `jf` `jb` |
 | apt (Debian only) | `au` `aug` `ai` `aps` `apsh` |
@@ -154,4 +155,4 @@ Errors (install.sh or a child run failed, clone failed) are listed in the summar
 
 Example: `$env:DOTFILES_DRYRUN = 1; irm https://raw.githubusercontent.com/Merl/dotfiles/master/install.ps1 | iex`
 
-**Legacy (2018):** the repo used to be checked out as a bare repository `~/.cfg` with work tree `$HOME` (`alias config='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'`). `install.sh` does not use or touch `~/.cfg`; remove it manually once the new setup works.
+**Legacy (2018):** the repo used to be checked out as a bare repository `~/.cfg` with work tree `$HOME` (`alias config='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'`; today `config` is a function for the normal checkout, see Aliases). `install.sh` does not use or touch `~/.cfg`; remove it manually once the new setup works.
