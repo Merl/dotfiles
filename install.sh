@@ -71,7 +71,6 @@ MANIFEST=(
     .vim/plug-snapshot.vim
     .config/starship.toml
     .config/mc/ini
-    .config/mc/panels.ini
     .sbin/tmux-merl.sh
     .gitconfig
 )

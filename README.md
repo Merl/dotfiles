@@ -19,7 +19,7 @@ The repository root mirrors `$HOME`: every file lives at the path it ends up at 
 | `.tmux.conf`, `.tmuxline.conf` | tmux incl. status line |
 | `.sbin/tmux-merl.sh` | `tm [session]`: attach to the tmux session (default `merl`) or create it; runs `~/.overwrites/tmux.sh` for new sessions |
 | `.vimrc`, `.vim/` | Vim; plugins via vim-plug (vendored `.vim/autoload/plug.vim`; tested commits in `.vim/plug-snapshot.vim`, applied with `install.sh --pinned` or `vim -S ~/.vim/plug-snapshot.vim`) |
-| `.config/mc/` | Midnight Commander |
+| `.config/mc/ini` | Midnight Commander; `auto_save_setup=false` so mc doesn't rewrite the repo file on exit (save on purpose with F9 › Options › Save setup). `panels.ini` is runtime state and not managed |
 | `.gitconfig`, `.selected_editor` | git, Debian editor choice |
 
 ## Aliases (`.bash_aliases`)
