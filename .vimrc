@@ -9,6 +9,10 @@
 "   restore:  vim -S ~/.vim/plug-snapshot.vim
 "   refresh:  :PlugUpdate, test, then :PlugSnapshot! ~/.vim/plug-snapshot.vim
 
+" Everything below needs +eval. vim-tiny (no +eval) skips the whole block
+" instead of showing an error for every line, see :help no-eval-feature.
+if 1
+
 " leader first, so that all <leader> mappings below use it
 " ("," instead of "\": fewer keystrokes on a German keyboard)
 let mapleader = ","
@@ -189,3 +193,5 @@ let g:rainbow_active = 1
 if filereadable(expand("~/.overwrites/vimrc"))
   source ~/.overwrites/vimrc
 endif
+
+endif " +eval
