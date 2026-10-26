@@ -73,6 +73,7 @@ MANIFEST=(
     .config/mc/ini
     .config/mc/panels.ini
     .sbin/tmux-merl.sh
+    .gitconfig
 )
 MANIFEST_LINUX=(
     .selected_editor
@@ -997,7 +998,7 @@ for w in "${WARNINGS[@]+"${WARNINGS[@]}"}"; do say "- warning: $w"; done
 
 say ""
 say "Notes:"
-say "- ~/.gitconfig is left alone (each host keeps its own)."
+say "- git: host-specific settings (editor, difftools, credentials, includeIf) go into ~/.overwrites/gitconfig."
 if [ "$OS" != windows ] && [ "$INSTALLED" -gt 0 ]; then
     say "- tmux: the new config takes effect when the next tmux server starts (running servers are not reloaded)."
 fi
