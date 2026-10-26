@@ -1,5 +1,29 @@
-[include]
-    path = ~/.overwrites/gitconfig
 [user]
 	name = Merl
 	email = merl@nachtblut.de
+
+[core]
+	editor = vim
+
+[init]
+	defaultBranch = master
+
+[pull]
+	ff = only
+
+[push]
+	autoSetupRemote = true
+
+[fetch]
+	prune = true
+
+[diff]
+	colorMoved = default
+
+[merge]
+	conflictStyle = zdiff3
+
+# Host-specific settings (other identity, credential helper, sshCommand ...)
+# go into ~/.overwrites/gitconfig; included last so they win.
+[include]
+	path = ~/.overwrites/gitconfig
