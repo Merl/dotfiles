@@ -1,0 +1,4 @@
+_arbeit/
+# created at runtime by vim / vim-plug
+.vim/plugged/
+.vim/undo-dir/
