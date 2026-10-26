@@ -686,7 +686,7 @@ deps_linux() {
             cmd=(brew install "${pkgs[@]}")
         elif get_root; then
             case $pm in
-                apt-get) cmd=(apt-get install -y "${pkgs[@]}") ;;
+                apt-get) cmd=(apt-get install -y --no-install-recommends "${pkgs[@]}") ;;
                 dnf)     cmd=(dnf install -y "${pkgs[@]}") ;;
                 pacman)  cmd=(pacman -S --needed --noconfirm "${pkgs[@]}") ;;
                 zypper)  cmd=(zypper --non-interactive install "${pkgs[@]}") ;;
@@ -712,7 +712,7 @@ deps_linux() {
                     local rest=()
                     for p in "${pkgs[@]}"; do [ "$p" = starship ] || rest+=("$p"); done
                     pkgs=("${rest[@]+"${rest[@]}"}")
-                    cmd=(${SUDO:+"$SUDO"} apt-get install -y "${pkgs[@]+"${pkgs[@]}"}")
+                    cmd=(${SUDO:+"$SUDO"} apt-get install -y --no-install-recommends "${pkgs[@]+"${pkgs[@]}"}")
                     [ "${#pkgs[@]}" -gt 0 ] || cmd=()
                 fi
             fi
