@@ -81,28 +81,26 @@ fi
 alias config='git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
 
 # --- tmux: refresh environment after re-attach -----------------------------------
-# After re-attaching from a new SSH connection, existing shells still point to
-# the old (dead) agent socket. refresh_env copies SSH_AUTH_SOCK, SSH_CONNECTION
-# and DISPLAY from the tmux session environment. It runs automatically only
-# inside tmux and only when SSH_AUTH_SOCK is set but no longer a socket, so a
-# normal prompt costs a single test. Call `refresh_env` by hand for DISPLAY.
+# tmux updates SSH_AUTH_SOCK, SSH_CONNECTION and DISPLAY in the session
+# environment on every attach (update-environment, tmux default), but shells
+# that are already running keep their old values. refresh_env copies the
+# current values from the session into this shell; inside tmux it runs before
+# every prompt (one `tmux show-environment` call), so agent forwarding keeps
+# working after a reconnect. A variable the new client doesn't have is
+# unset, except SSH_AUTH_SOCK while it still points to a live socket.
 refresh_env() {
     [ -n "$TMUX" ] || return 0
     local line
     while IFS= read -r line; do
         case $line in
             SSH_AUTH_SOCK=*|SSH_CONNECTION=*|DISPLAY=*) export "$line" ;;
-            -SSH_AUTH_SOCK|-SSH_CONNECTION|-DISPLAY)    unset "${line#-}" ;;
+            -SSH_AUTH_SOCK) [ -S "${SSH_AUTH_SOCK-}" ] || unset SSH_AUTH_SOCK ;;
+            -SSH_CONNECTION|-DISPLAY) unset "${line#-}" ;;
         esac
     done < <(tmux show-environment 2>/dev/null)
 }
-_refresh_env_if_stale() {
-    if [ -n "$SSH_AUTH_SOCK" ] && [ ! -S "$SSH_AUTH_SOCK" ]; then
-        refresh_env
-    fi
-}
 if [ -n "$TMUX" ]; then
-    _prompt_cmd_add _refresh_env_if_stale
+    _prompt_cmd_add refresh_env
 fi
 
 # --- Prompt --------------------------------------------------------------------
