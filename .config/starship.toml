@@ -1,0 +1,76 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Two-line prompt in the spirit of the old bash-it "binaryanomaly" theme.
+# Requires a Nerd Font (glyphs are written as \u escapes, see comments).
+# Note: right_format is not supported in bash, so everything is on the left.
+#
+#   line 1: time  user@host  directory  git branch/status  duration  exit status
+#   line 2: prompt character (red after an error)
+
+format = """
+$time\
+$username\
+$hostname\
+$directory\
+$git_branch\
+$git_state\
+$git_status\
+$cmd_duration\
+$jobs\
+$status\
+$line_break\
+$character"""
+
+add_newline = true
+
+[time]
+disabled = false
+time_format = "%H:%M:%S"
+format = "[ $time]($style) "          # nf-fa-clock_o
+style = "dimmed white"
+
+[username]
+show_always = true
+format = "[$user]($style)"
+style_user = "bold green"
+style_root = "bold white on red"
+
+[hostname]
+ssh_only = false                             # always show the host
+format = "[@$hostname]($style) "
+style = "bold green"
+
+[directory]
+truncation_length = 4
+truncate_to_repo = true
+truncation_symbol = "…/"
+format = "[ $path]($style)[$read_only]($read_only_style) "   # nf-fa-folder_open
+style = "bold blue"
+read_only = " "                        # nf-fa-lock
+
+[git_branch]
+symbol = " "                           # nf-dev-git_branch
+format = "[$symbol$branch(:$remote_branch)]($style) "
+style = "bold purple"
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style) )'
+style = "bold yellow"
+
+[cmd_duration]
+min_time = 2_000                             # milliseconds
+format = "[ $duration]($style) "       # nf-fa-hourglass_half
+style = "yellow"
+
+[jobs]
+symbol = " "                           # nf-fa-gear
+
+[status]
+disabled = false
+symbol = " "                           # nf-fa-times
+format = "[$symbol$status]($style) "
+style = "bold red"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"

@@ -1,35 +1,37 @@
 #!/bin/sh
-#set -x
-SESSION=merl
-#tmux="tmux -2 -f tmux-merl.conf"
-tmux="/usr/bin/tmux -2"
+# tmux-merl.sh [session] - attach to a tmux session, creating it if needed.
+#
+#   session  name of the session (default: merl)
+#
+# Inside tmux the client is switched to the session instead of nesting.
+# A new session starts with one window; split on demand.
+#
+# Host-specific setup: if ~/.overwrites/tmux.sh exists, it is sourced once,
+# right after the session has been created and before attaching. It can use
+# the variables $tmux (tmux command) and $SESSION (session name), e.g.
+#     $tmux new-window -t $SESSION:1
+#     $tmux send-keys  -t $SESSION:1.0 'weechat' enter
 
+SESSION=${1:-merl}
+tmux=tmux
 
-# if the session is already running, just attach to it.
-$tmux has-session -t $SESSION
-if [ $? -eq 0 ]; then
-	echo "Session $SESSION already exists. Attaching."
-	sleep 1
-	$tmux attach -t $SESSION
-	exit 0;
+if ! command -v "$tmux" >/dev/null 2>&1; then
+    echo "tmux-merl.sh: tmux not found" >&2
+    exit 1
 fi
 
-# create a new session, named $SESSION, and detach from it
-$tmux new-session -d -s $SESSION
-#$tmux new-window    -t $SESSION:0 
-$tmux split-window  -h -t $SESSION:0
-$tmux split-window  -h -t $SESSION:0
-$tmux split-window  -h -t $SESSION:0
-$tmux select-layout -t $SESSION:0 63dc,180x55,0,0{65x55,0,0[65x12,0,0,65x42,0,13],114x55,66,0[114x37,66,0,114x17,66,38]}
-#$tmux new-window    -t $SESSION:1 
-#$tmux new-window    -t $SESSION:2  
-#$tmux new-window    -t $SESSION:3  
-#$tmux split-window  -h -t $SESSION:3
-#$tmux new-window    -t $SESSION:4
-#$tmux select-window -t $SESSION:0
-#$tmux send-keys -t $SESSION:0.0 'echo hallo' enter
-
-if [ -f "$HOME/.overwrites/tmux.sh" ]; then
-    . "$HOME/.overwrites/tmux.sh"
+# "=name" matches the session name exactly (no prefix matching)
+if ! $tmux has-session -t "=$SESSION" 2>/dev/null; then
+    first=$($tmux new-session -d -s "$SESSION" -P -F '#{window_id}') || exit 1
+    if [ -f "$HOME/.overwrites/tmux.sh" ]; then
+        . "$HOME/.overwrites/tmux.sh"
+        # start in the first window, whatever the host script selected
+        $tmux select-window -t "$first"
+    fi
 fi
-$tmux attach -t $SESSION
+
+if [ -n "$TMUX" ]; then
+    exec $tmux switch-client -t "=$SESSION"
+else
+    exec $tmux attach-session -t "=$SESSION"
+fi
