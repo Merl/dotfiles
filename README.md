@@ -21,6 +21,18 @@ The repository root mirrors `$HOME`: every file lives at the path it ends up at 
 | `.vimrc`, `.vim/` | Vim; plugins via vim-plug (vendored `.vim/autoload/plug.vim`; tested commits in `.vim/plug-snapshot.vim`, applied with `install.sh --pinned` or `vim -S ~/.vim/plug-snapshot.vim`) |
 | `.config/mc/ini` | Midnight Commander; `auto_save_setup=false` so mc doesn't rewrite the repo file on exit (save on purpose with F9 › Options › Save setup). `panels.ini` is runtime state and not managed |
 | `.gitconfig`, `.selected_editor` | git, Debian editor choice |
+| `.config/weechat/` | WeeChat (Linux; see below) |
+
+## WeeChat
+
+`~/.config/weechat` is a symlink to the whole directory in the repo, because WeeChat replaces its `.conf` files on save (write + rename), which would break single-file links. `/set …` + `/save` therefore changes the repo work tree: commit what you want to keep (while it is uncommitted, `install.sh` does not pull).
+
+- Servers: Libera.Chat, QuakeNet, IRCNet, EuIRC; connect directly (TLS except QuakeNet), autoconnect on, nicks `Merl[DT]`, `Merl[]`.
+- No secrets in the repo: passwords go into WeeChat's secured data (`/secure set libera_pw …`, then e.g. `/set irc.server.libera.sasl_password "${sec.data.libera_pw}"`); `sec.conf` is git-ignored and stays on the host.
+- Scripts (`install.sh` downloads them from weechat.org into `~/.local/share/weechat` and autoloads them, if weechat is installed): highmon, screen_away (away while tmux is detached), queryman, whois_on_query, tmux_env.
+- A legacy `~/.weechat` takes precedence over `~/.config/weechat`; `install.sh` warns while it exists.
+
+Useful keys: `Alt+1…0` / `Alt+j NN` buffer, `Alt+←/→` previous/next buffer, `Alt+a` next buffer with activity, `Alt+w`+arrow switch window, `Alt+z` zoom window, `Alt+l` bare display (for copying), `F1`/`F2` scroll buffer list, `F11`/`F12` nicklist, `Ctrl+r` search. In tmux `C-a` is the prefix: use `Home` (or `C-a a`) for beginning of line.
 
 ## Aliases (`.bash_aliases`)
 
@@ -95,9 +107,11 @@ Run it as your normal user, not with `sudo` (it refuses to run under sudo with a
    - Already installed (our symlink, or an identical copy) → `ok`. Anything else in the way is moved to `~/.dotfiles-backup/<YYYYmmdd-HHMMSS>/<path>` first; `installed.list` there logs what was done (each move right after it happened, and each installed copy with its SHA-256). The backup directory is only created when something changes. If installing a file fails after the move, the original is put back at once (or stays restorable with `--restore`), the run continues and exits with status 1.
    - A parent directory that is a symlink into the repository (e.g. `~/.vim -> ~/.dotfiles/.vim`) is fine: the files are then the repository files themselves (`ok`). A parent that resolves to some other place inside the repository is refused with a warning; nothing is moved or created inside the repository.
    - `.gitconfig` is installed too; host-specific git settings (editor, difftools, credential helpers, `includeIf`) belong in `~/.overwrites/gitconfig`, which it includes last.
+   - `.config/weechat` is a directory and is only linked on Linux (skipped with `--copy`).
    - Not installed: `.selected_editor` outside Linux, `README.md`, `.gitattributes`, `.gitignore`, `windows/` (see `install.ps1`).
 4. **Vim plugins:** if a plugin from `.vimrc` is missing in `~/.vim/plugged`, `vim -es '+PlugInstall --sync'` runs headless (timeout 600 s) and installs the newest version; if the fzf binary is still missing, `fzf#install()`. Plugins that are already there are not updated (`:PlugUpdate` in vim). With `--pinned`, all plugins are then checked out at the commits in `~/.vim/plug-snapshot.vim` (headless `vim -S plug-snapshot.vim`; `ok` when they already are). To go back to the newest versions: `:PlugUpdate`.
-5. **Summary** of what changed, warnings, and hints (tmux config applies at the next tmux server start; running servers are not reloaded; host-specific parts of an old `~/.bashrc` go to `~/.overwrites/bashrc.sh`).
+5. **WeeChat scripts** (Linux, only if `weechat` is installed): missing scripts from the list in `install.sh` are downloaded from weechat.org into `~/.local/share/weechat/<language>/` and linked into `autoload/`. Installed scripts are not updated (`/script update` + `/script upgrade` in WeeChat).
+6. **Summary** of what changed, warnings, and hints (tmux config applies at the next tmux server start; running servers are not reloaded; host-specific parts of an old `~/.bashrc` go to `~/.overwrites/bashrc.sh`).
 
 | Option | |
 |---|---|

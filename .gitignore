@@ -2,3 +2,5 @@ _arbeit/
 # created at runtime by vim / vim-plug
 .vim/plugged/
 .vim/undo-dir/
+# WeeChat: encrypted secrets (/secure) stay on the host
+.config/weechat/sec.conf

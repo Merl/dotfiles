@@ -76,7 +76,21 @@ MANIFEST=(
 )
 MANIFEST_LINUX=(
     .selected_editor
+    # a directory: WeeChat replaces its .conf files (write + rename), which
+    # would turn single-file links into plain files; link mode only
+    .config/weechat
 )
+
+# WeeChat scripts (<language>/<file>), downloaded from weechat.org into the
+# WeeChat data directory and autoloaded; only when weechat is installed
+WEECHAT_SCRIPTS=(
+    perl/highmon.pl
+    python/screen_away.py
+    python/queryman.py
+    python/whois_on_query.py
+    python/tmux_env.py
+)
+WEECHAT_SCRIPT_URL=https://weechat.org/files/scripts
 
 # --- helpers -----------------------------------------------------------------
 say()  { printf '%s\n' "$*"; }
@@ -810,7 +824,11 @@ REPO_REAL=${REPO_REAL:-$REPO}
 # install_one SRC TARGET KEY: KEY is the relpath used in the backup and log
 install_one() {
     local src=$1 target=$2 key=$3 label=$MODE detail="" backed=0 parent
-    [ -f "$src" ] || { warn "missing in repo: $src"; return 0; }
+    [ -f "$src" ] || [ -d "$src" ] || { warn "missing in repo: $src"; return 0; }
+    if [ -d "$src" ] && [ "$MODE" = copy ]; then
+        act skip "$key" "directory; only installed as a symlink"
+        return 0
+    fi
 
     # a parent directory (e.g. ~/.vim) is a symlink into the repository:
     # the target is the repository file itself
@@ -979,7 +997,56 @@ else
 fi
 
 # =============================================================================
-# 5. summary
+# 5. WeeChat scripts
+# =============================================================================
+step "WeeChat scripts"
+WEECHAT_DATA=${XDG_DATA_HOME:-$HOME/.local/share}/weechat
+if [ "$OS" != linux ]; then
+    act skip "weechat" "Linux only"
+elif ! have weechat; then
+    act skip "weechat" "weechat not installed"
+else
+    if [ -d "$HOME/.weechat" ]; then
+        warn "$HOME/.weechat exists: WeeChat uses it instead of ~/.config/weechat from the repository; move it away"
+    fi
+    missing_scripts=()
+    for s in "${WEECHAT_SCRIPTS[@]}"; do
+        [ -f "$WEECHAT_DATA/$s" ] && [ -L "$WEECHAT_DATA/${s%/*}/autoload/${s#*/}" ] || missing_scripts+=("$s")
+    done
+    if [ "${#missing_scripts[@]}" -eq 0 ]; then
+        act ok "weechat scripts" "${#WEECHAT_SCRIPTS[@]} installed"
+    elif ! have curl; then
+        warn "weechat scripts missing (${missing_scripts[*]##*/}); curl is needed to download them"
+    else
+        act install "weechat scripts" "${missing_scripts[*]##*/}"
+        if [ "$DRY_RUN" -eq 0 ]; then
+            failed_scripts=()
+            for s in "${missing_scripts[@]}"; do
+                lang=${s%/*} name=${s#*/}
+                if [ ! -f "$WEECHAT_DATA/$s" ]; then
+                    mkdir -p -- "$WEECHAT_DATA/$lang/autoload"
+                    if ! with_timeout 60 curl -fsSL "$WEECHAT_SCRIPT_URL/$name" -o "$WEECHAT_DATA/$s.tmp" ||
+                       ! mv -- "$WEECHAT_DATA/$s.tmp" "$WEECHAT_DATA/$s"; then
+                        rm -f -- "$WEECHAT_DATA/$s.tmp"
+                        failed_scripts+=("$name")
+                        continue
+                    fi
+                fi
+                # same relative link as WeeChat's /script autoload
+                mkdir -p -- "$WEECHAT_DATA/$lang/autoload"
+                ln -sfn -- "../$name" "$WEECHAT_DATA/$lang/autoload/$name"
+            done
+            if [ "${#failed_scripts[@]}" -gt 0 ]; then
+                warn "weechat scripts not downloaded: ${failed_scripts[*]}"
+            else
+                CHANGES+=("weechat scripts installed: ${missing_scripts[*]##*/}")
+            fi
+        fi
+    fi
+fi
+
+# =============================================================================
+# 6. summary
 # =============================================================================
 step "Summary"
 if [ "${#CHANGES[@]}" -eq 0 ]; then
