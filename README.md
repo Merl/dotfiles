@@ -51,6 +51,12 @@ The same files work in Git for Windows' Git Bash and in MSYS2; home is `C:\Users
 - The fzf binary for vim is downloaded by vim-plug (do-hook), on Linux and Windows.
 - Windows-specific settings (e.g. `GIT_SSH` pointing to Windows OpenSSH) belong in `~/.overwrites/bashrc.sh`.
 
+### PowerShell (7 and 5.1) and Windows Terminal
+
+- `windows/Microsoft.PowerShell_profile.ps1` is shared by PowerShell 7 and Windows PowerShell 5.1 and goes to `<Documents>\PowerShell\` and `<Documents>\WindowsPowerShell\` (`[Environment]::GetFolderPath('MyDocuments')`); keep it ASCII-only for 5.1. It uses the same `~/.config/starship.toml`, PSReadLine history search on Up/Down, and a subset of the shortcuts as functions (`glg` instead of `gl`; `gc`, `gp`, `gl` are built-in PowerShell aliases). Host-local additions: `~/.overwrites/profile.ps1`.
+- Prerequisites: `winget install Starship.Starship DEVCOM.JetBrainsMonoNerdFont`.
+- Windows Terminal: font `JetBrainsMono NF` in `profiles.defaults`, PowerShell 7 as default profile, an SSH profile using `C:\Windows\System32\OpenSSH\ssh.exe` (the ssh agent runs there).
+
 ## Remotes
 
 | Name | Target |
